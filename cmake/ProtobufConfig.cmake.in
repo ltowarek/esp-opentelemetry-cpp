@@ -1,0 +1,20 @@
+# Synthetic package-config for the Protobuf that the parent CMake build
+# has already made available via add_subdirectory(). Placed in
+# ${CMAKE_BINARY_DIR}/_deps/esp_opentelemetry_protobuf_prefix/lib/cmake/protobuf/
+# and surfaced to downstream components by appending that prefix to
+# CMAKE_PREFIX_PATH, so find_package(Protobuf CONFIG) succeeds without
+# needing protobuf_INSTALL=ON (which would drag the whole libprotoc
+# install tree in).
+#
+# The actual targets (protobuf::libprotobuf, protobuf::libprotobuf-lite,
+# protobuf::protoc, utf8_range::utf8_range, utf8_range::utf8_validity)
+# and the Abseil targets are declared globally by the add_subdirectory()
+# calls in cmake/protobuf_setup.cmake, so we only need to publish the
+# find_package result variables here.
+
+set(Protobuf_FOUND              TRUE)
+set(Protobuf_VERSION            "@PROTOBUF_VERSION@")
+set(Protobuf_INCLUDE_DIR        "@PROTOBUF_INCLUDE_DIR@")
+set(Protobuf_INCLUDE_DIRS       "@PROTOBUF_INCLUDE_DIR@")
+set(Protobuf_PROTOC_EXECUTABLE  "@PROTOBUF_HOST_PROTOC@")
+set(PROTOBUF_PROTOC_EXECUTABLE  "@PROTOBUF_HOST_PROTOC@")

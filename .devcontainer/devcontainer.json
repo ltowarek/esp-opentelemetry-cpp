@@ -1,0 +1,33 @@
+{
+    "name": "esp-opentelemetry-cpp",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "workspaceFolder": "/workspaces/esp-opentelemetry-cpp",
+    "mounts": [
+        "source=claude-code-config,target=/home/vscode/.claude,type=volume"
+    ],
+    "containerEnv": {
+        "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "idf.showOnboardingOnInit": false,
+                "idf.toolsPath": "${containerEnv:IDF_TOOLS_PATH}",
+                "idf.espIdfPath": "${containerEnv:IDF_PATH}",
+                "idf.pythonBinPath": "${containerEnv:IDF_TOOLS_PATH}/python_env/idf5.3_py3.10_env/bin/python",
+                "idf.adapterTargetName": "esp32s3",
+                "cmake.generator": "Ninja",
+                "cmake.configureOnOpen": false
+            },
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "espressif.esp-idf-extension@1.11.1",
+                "streetsidesoftware.code-spell-checker"
+            ]
+        }
+    },
+    "remoteUser": "vscode"
+}
