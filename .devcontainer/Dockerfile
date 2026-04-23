@@ -5,6 +5,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     curl \
     locales
 
+COPY install-gh.sh /tmp/install-gh.sh
+RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
+
 # WA for VSCode issue https://github.com/microsoft/vscode/issues/189924
 RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen && locale-gen
 
