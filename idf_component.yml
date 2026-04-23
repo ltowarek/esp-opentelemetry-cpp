@@ -1,0 +1,9 @@
+version: "0.1.0"
+description: ESP-IDF component integrating OpenTelemetry C++ SDK with ESP32 firmware
+url: https://github.com/ltowarek/esp-opentelemetry-cpp
+
+dependencies:
+  idf: ">=5.0.0"
+  esp_http_client: "*"
+  json: "*"
+  pthread: "*"
