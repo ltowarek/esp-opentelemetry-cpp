@@ -25,6 +25,7 @@ USER $USERNAME
 
 RUN git config --global --add safe.directory /opt/esp/idf/components/openthread/openthread
 RUN echo "source $IDF_PATH/export.sh > /dev/null 2>&1" >> $HOME/.bashrc
-
-RUN curl -fsSL https://claude.ai/install.sh | bash -s stable
 RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+COPY --chown=$USERNAME:$USERNAME install-claude.sh /tmp/install-claude.sh
+RUN bash /tmp/install-claude.sh && rm /tmp/install-claude.sh
