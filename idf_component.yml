@@ -4,6 +4,3 @@ url: https://github.com/ltowarek/esp-opentelemetry-cpp
 
 dependencies:
   idf: ">=5.0.0"
-  esp_http_client: "*"
-  json: "*"
-  pthread: "*"
