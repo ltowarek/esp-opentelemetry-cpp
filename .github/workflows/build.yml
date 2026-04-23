@@ -31,7 +31,7 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v7
       with:
-        context: .
+        context: .devcontainer
         tags: ghcr.io/ltowarek/esp-opentelemetry-cpp-devcontainer
         file: ./.devcontainer/Dockerfile
         push: true
