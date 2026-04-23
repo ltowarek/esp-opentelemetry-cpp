@@ -17,7 +17,7 @@ jobs:
         uses: dependabot/fetch-metadata@v2
 
       - name: Enable auto-merge
-        if: contains(steps.metadata.outputs.dependency-names, 'opentelemetry-cpp')
+        if: steps.metadata.outputs.package-ecosystem == 'gitsubmodule'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
