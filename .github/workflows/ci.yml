@@ -1,4 +1,4 @@
-name: Build
+name: CI
 
 on:
   pull_request:
@@ -36,12 +36,21 @@ jobs:
         file: ./.devcontainer/Dockerfile
         push: true
 
-  run-checks:
+  build:
     needs: build-docker
     permissions:
       contents: read
 
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - project: simple example
+            path: examples/simple
+            qemu: true
+          - project: batch example
+            path: examples/batch
 
     container:
       image: ghcr.io/ltowarek/esp-opentelemetry-cpp-devcontainer
@@ -65,5 +74,11 @@ jobs:
         source $IDF_PATH/export.sh
         echo "$PATH" >> $GITHUB_PATH
 
-    - name: Build basic example
-      run: idf.py -C examples/basic build
+    - name: Build
+      run: idf.py build
+      working-directory: ${{ matrix.path }}
+
+    - name: Run in QEMU
+      if: ${{ matrix.qemu }}
+      working-directory: ${{ matrix.path }}
+      run: bash test_qemu.sh

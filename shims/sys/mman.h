@@ -1,14 +1,15 @@
 // Stub sys/mman.h for ESP-IDF (Xtensa/newlib).
 //
-// Abseil detects __XTENSA__ and defines ABSL_HAVE_MMAP, but ESP-IDF's
-// newlib does not ship sys/mman.h.  This stub satisfies the #include
-// while leaving mmap/munmap undefined so the linker rejects any actual
-// call — which is fine because the code paths guarded by ABSL_HAVE_MMAP
-// in absl/debugging are never reached at runtime on our firmware.
+// ESP-IDF's newlib does not ship sys/mman.h. Abseil's LowLevelAlloc uses
+// mmap to grow its internal arena on every mutex/thread-identity allocation.
+// The original stub returned MAP_FAILED unconditionally, which caused
+// ABSL_RAW_LOG(FATAL, "mmap error") -> abort() on first Abseil allocation.
+// Back mmap with malloc so Abseil's allocator works on the FreeRTOS heap.
 
 #pragma once
 
 #include <stddef.h>   // size_t
+#include <stdlib.h>   // malloc, free
 
 #define PROT_READ   0x1
 #define PROT_WRITE  0x2
@@ -23,13 +24,15 @@ extern "C" {
 
 static inline void *mmap(void *addr, size_t length, int prot, int flags,
                          int fd, long offset) {
-  (void)addr; (void)length; (void)prot; (void)flags; (void)fd; (void)offset;
-  return MAP_FAILED;
+  (void)addr; (void)prot; (void)flags; (void)fd; (void)offset;
+  void *ptr = malloc(length);
+  return ptr ? ptr : MAP_FAILED;
 }
 
 static inline int munmap(void *addr, size_t length) {
-  (void)addr; (void)length;
-  return -1;
+  (void)length;
+  free(addr);
+  return 0;
 }
 
 #ifdef __cplusplus

@@ -55,6 +55,8 @@ idf_component_register(
 # esp_posix_shims.c.o before libnosys is ever consulted.
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=nanosleep" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=pthread_atfork" APPEND)
+idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=sysconf" APPEND)
+idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
 
 if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     # opentelemetry-cpp's architecture autodetection does not understand

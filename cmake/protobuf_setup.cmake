@@ -166,7 +166,16 @@ function(_esp_opentelemetry_apply_int_override dir)
                 # assertion. Folding those tables back into default
                 # .rodata via an empty macro definition fixes it
                 # without patching any submodule source.
-                "SHELL:-D ABSL_ATTRIBUTE_SECTION_VARIABLE(name)=")
+                "SHELL:-D ABSL_ATTRIBUTE_SECTION_VARIABLE(name)="
+                # Abseil's Mutex deadlock-detection (DebugOnlyDeadlockCheck)
+                # calls GetOrCreateCurrentThreadIdentity -> pthread_key_create
+                # -> pvTaskGetThreadLocalStoragePointer during protobuf's
+                # global static constructors, which run before vTaskStartScheduler.
+                # FreeRTOS TLS is not ready at that point -> LoadProhibited crash.
+                # NDEBUG sets kMutexDeadlockDetectionMode = kIgnore, turning
+                # DebugOnlyDeadlockCheck into a no-op. The uncontended lock
+                # fast-paths via CAS and never touches TLS.
+                -DNDEBUG)
         endif()
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)

@@ -8,7 +8,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -114,16 +113,12 @@ public:
       return;
     }
     active_.store(true, std::memory_order_release);
-    auto self   = shared_from_this();
-    auto req    = request_;
-    auto handle = handler;
-    // OtlpHttpExporter calls SendRequest from BatchSpanProcessor's worker
-    // thread but still expects asynchronous semantics - spawn a task so the
-    // caller can continue while esp_http_client blocks on the socket.
-    std::thread([self, req, handle]() {
-      self->PerformSync(*req, handle.get());
-      self->active_.store(false, std::memory_order_release);
-    }).detach();
+    // Call synchronously: BatchSpanProcessor's worker thread calls
+    // SendRequest then immediately calls WaitForResponse(), so firing the
+    // callbacks before returning is correct and avoids spawning a second
+    // thread (whose stack would also overflow esp_http_client_perform).
+    PerformSync(*request_, handler.get());
+    active_.store(false, std::memory_order_release);
   }
 
   bool IsSessionActive() noexcept override {
@@ -206,8 +201,15 @@ private:
 
   std::string BuildUrl(const std::string& uri) const {
     if (uri.empty()) return url_;
-    if (uri.front() == '/') return url_ + uri;
-    return uri;
+    if (uri.rfind("http://", 0) == 0 || uri.rfind("https://", 0) == 0) return uri;
+    // uri is a relative path; strip any existing path from url_ to get the base
+    // (mirrors curl transport: host_ = scheme://host:port/)
+    auto scheme_end = url_.find("://");
+    if (scheme_end == std::string::npos) return url_;
+    auto path_start = url_.find('/', scheme_end + 3);
+    std::string base = (path_start == std::string::npos) ? url_ : url_.substr(0, path_start);
+    if (uri.front() == '/') return base + uri;
+    return base + "/" + uri;
   }
 
   static esp_http_client_method_t ToEspMethod(http_client::Method m) {
