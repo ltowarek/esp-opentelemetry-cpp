@@ -82,3 +82,12 @@ jobs:
       if: ${{ matrix.qemu }}
       working-directory: ${{ matrix.path }}
       run: bash test_qemu.sh
+
+  ci-status:
+    needs: [build-docker, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Fail if any needed job did not succeed
+      if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+      run: exit 1
