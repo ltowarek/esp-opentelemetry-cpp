@@ -270,14 +270,13 @@ std::shared_ptr<http_client::HttpClient> MakeEspHttpClient() {
 
 }  // namespace esp_opentelemetry
 
-// --- Replace the default opentelemetry-cpp HTTP transport factory -----------
+// --- esp_http_client-backed HttpClientFactory ----------------------------
 //
-// opentelemetry_http_client_curl ships three free functions that the
-// OTLP exporter calls via HttpClientFactory::Create / CreateSync. The
-// default implementation uses libcurl. We build the same target from
-// this source file instead (see CMakeLists.txt), redirecting the factory
-// to our esp_http_client-backed client. This avoids cross-compiling libcurl
-// for Xtensa while keeping the opentelemetry-cpp link graph intact.
+// Implements the three free functions that the OTLP exporter calls via
+// HttpClientFactory. This file is compiled into the standalone
+// opentelemetry_http_client_esp target (see CMakeLists.txt), which is
+// PRIVATE-linked into opentelemetry_exporter_otlp_http_client in place
+// of the default libcurl backend.
 
 #include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/sdk/common/thread_instrumentation.h"

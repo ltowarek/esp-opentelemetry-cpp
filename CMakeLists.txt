@@ -19,12 +19,10 @@ set(ESP_OPENTELEMETRY_SRCS
 
 # NOTE: esp_http_client_transport.cpp is intentionally *not* listed
 # here. When CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED is on, it is
-# compiled as the sole source of the vendored
-# `opentelemetry_http_client_curl` target (see the set_property(...
-# SOURCES ...) call below), so it sits on the opentelemetry-cpp side of
-# the link graph instead of our component. This keeps the factory free
-# functions in the same translation unit opentelemetry-cpp expects them
-# in and avoids compiling the file twice.
+# compiled into the opentelemetry_http_client_esp STATIC target below
+# and PRIVATE-linked into opentelemetry_exporter_otlp_http_client so
+# the HttpClientFactory symbols resolve at the right point on the link
+# line without being compiled twice.
 
 # The opentelemetry-cpp api/ tree is header-only and compiles without the
 # SDK. Expose it as part of the component's public include path so the
@@ -82,82 +80,9 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     set(WITH_STL              "CXX17" CACHE STRING "" FORCE)
     set(WITH_OTLP_HTTP_COMPRESSION OFF CACHE BOOL "" FORCE)
     set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
-
-    # Advertise a stub libcurl so opentelemetry-cpp's cmake/curl.cmake
-    # takes the find_package path and skips FetchContent of curl
-    # itself. curl cannot be cross-compiled to Xtensa cleanly
-    # (autoprobes for hostent/off_t/recv/send all fail), and we never
-    # link the curl-based HTTP transport anyway — our custom
-    # esp_http_client-based HttpClient is installed at runtime.
-    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/shims")
-
-    # WITH_OTLP_HTTP=ON unconditionally pulls curl in as the SDK's default
-    # HttpClient backend. We provide our own esp_http_client-based
-    # transport via esp_opentelemetry::MakeEspHttpClient(), so nothing
-    # calls the curl path at runtime — but otel-cpp still drags curl into
-    # the build graph, and curl's CMake insists on finding a TLS backend
-    # (OpenSSL by default, which isn't present on the Xtensa sysroot).
-    # Disable every TLS backend and let curl build without SSL. The
-    # resulting libcurl is never linked into the final image because
-    # HttpClientFactory::Create() is only referenced from OtlpHttpClient's
-    # default constructor, which we never call.
-    set(CURL_ENABLE_SSL     OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_OPENSSL    OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_MBEDTLS    OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_BEARSSL    OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_WOLFSSL    OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_GNUTLS     OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_NSS        OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_SCHANNEL   OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_SECTRANSP  OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_LIBSSH2    OFF CACHE BOOL "" FORCE)
-    set(CURL_USE_LIBPSL     OFF CACHE BOOL "" FORCE)
-    set(CURL_ENABLE_EXPORT_TARGET OFF CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_LDAP   ON  CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_LDAPS  ON  CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_NTLM   ON  CACHE BOOL "" FORCE)
-    set(USE_NGHTTP2         OFF CACHE BOOL "" FORCE)
-    set(HTTP_ONLY           ON  CACHE BOOL "" FORCE)
-
-    # curl's CMake runs check_type_size() for off_t and curl_off_t.
-    # These probes fail under the Xtensa cross-compile (no standalone
-    # sysroot to link against), leaving SIZEOF_CURL_OFF_T undefined.
-    # curl_setup.h then evaluates `#if (SIZEOF_CURL_OFF_T < 8)` as
-    # `#if (0 < 8)` and errors out. Pre-populate the cache so the
-    # probes are skipped. ESP-IDF's newlib has 32-bit off_t; curl_off_t
-    # is always int64_t (8 bytes).
-    set(SIZEOF_OFF_T      4 CACHE INTERNAL "Size of off_t on Xtensa/newlib")
-    set(SIZEOF_CURL_OFF_T 8 CACHE INTERNAL "Size of curl_off_t (always int64_t)")
-
-    # curl's CMake runs check_c_source_compiles for recv/send signatures;
-    # these fail on Xtensa cross-compile. Pre-populate the results so
-    # curl_setup.h finds HAVE_RECV/HAVE_SEND and defines sread/swrite.
-    # ESP-IDF's lwIP provides BSD-compatible recv/send signatures.
-    set(HAVE_RECV 1 CACHE INTERNAL "")
-    set(RECV_TYPE_ARG1 "int"    CACHE INTERNAL "")
-    set(RECV_TYPE_ARG2 "void *" CACHE INTERNAL "")
-    set(RECV_TYPE_ARG3 "size_t" CACHE INTERNAL "")
-    set(RECV_TYPE_ARG4 "int"    CACHE INTERNAL "")
-    set(RECV_TYPE_RETV "ssize_t" CACHE INTERNAL "")
-    set(HAVE_SEND 1 CACHE INTERNAL "")
-    set(SEND_TYPE_ARG1 "int"          CACHE INTERNAL "")
-    set(SEND_TYPE_ARG2 "const void *" CACHE INTERNAL "")
-    set(SEND_TYPE_ARG3 "size_t"       CACHE INTERNAL "")
-    set(SEND_TYPE_ARG4 "int"          CACHE INTERNAL "")
-    set(SEND_TYPE_RETV "ssize_t"      CACHE INTERNAL "")
-
-    # ESP-IDF's newlib/lwIP provides ssize_t (typedef int). curl's
-    # check_type_size("ssize_t") fails on cross-compile, causing it to
-    # emit `#define ssize_t long` in curl_config.h — which collides
-    # with lwIP's `typedef int ssize_t`. Pre-populate the result.
-    set(SIZEOF_SSIZE_T      4 CACHE INTERNAL "sizeof(ssize_t) on Xtensa/newlib")
-    set(HAVE_SIZEOF_SSIZE_T 1 CACHE INTERNAL "ssize_t exists in ESP-IDF newlib")
-
-    # Similarly pre-populate other type sizes that curl probes.
-    set(SIZEOF_SIZE_T  4 CACHE INTERNAL "sizeof(size_t) on Xtensa")
-    set(SIZEOF_LONG    4 CACHE INTERNAL "sizeof(long) on Xtensa")
-    set(SIZEOF_INT     4 CACHE INTERNAL "sizeof(int) on Xtensa")
-    set(SIZEOF_TIME_T  4 CACHE INTERNAL "sizeof(time_t) on Xtensa/newlib")
+    # Skip libcurl entirely; we supply HttpClientFactory via
+    # opentelemetry_http_client_esp below.
+    set(WITH_CUSTOM_HTTP_CLIENT ON  CACHE BOOL "" FORCE)
 
     # Materialize Abseil + libprotobuf + the synthesized Protobuf package
     # config *before* opentelemetry-cpp's CMake runs. Without this, the
@@ -179,25 +104,19 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     _esp_opentelemetry_apply_int_override(
         ${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp)
 
-    # Replace the sources of the stock `opentelemetry_http_client_curl`
-    # target with our esp_http_client-backed factory. The curl sources
-    # cannot be cross-compiled (libcurl is a stub), and the public
-    # OtlpHttpExporter constructor only consumes an OtlpHttpClient
-    # constructed via HttpClientFactory — so redirecting the factory
-    # here gives the stock SDK a working transport on ESP-IDF without
-    # touching any vendored file.
-    if(TARGET opentelemetry_http_client_curl)
-        set_property(TARGET opentelemetry_http_client_curl
-            PROPERTY SOURCES
-                "${CMAKE_CURRENT_LIST_DIR}/src/esp_http_client_transport.cpp")
-        # Link against the ESP-IDF component target so all transitive
-        # include dirs (esp_http_client, esp_event, esp_common, log,
-        # freertos, lwip, ...) propagate automatically.
-        target_link_libraries(opentelemetry_http_client_curl PRIVATE
-            idf::esp_http_client)
-        target_include_directories(opentelemetry_http_client_curl PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/src")
-    endif()
+    # Provide the esp_http_client-backed HttpClientFactory that the OTLP HTTP
+    # exporter calls through. WITH_CUSTOM_HTTP_CLIENT=ON leaves the exporter
+    # without a linked factory; we supply one here via a named STATIC target
+    # PRIVATE-linked into the exporter so the factory symbols sit in the right
+    # place on the link line.
+    add_library(opentelemetry_http_client_esp STATIC
+        "${CMAKE_CURRENT_LIST_DIR}/src/esp_http_client_transport.cpp")
+    target_link_libraries(opentelemetry_http_client_esp PRIVATE
+        idf::esp_http_client opentelemetry_ext opentelemetry_sdk)
+    target_include_directories(opentelemetry_http_client_esp PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src")
+    target_link_libraries(opentelemetry_exporter_otlp_http_client PRIVATE
+        opentelemetry_http_client_esp)
 
     # Target-level .pb.cc files produced by opentelemetry-proto at
     # configure time use the generated google/protobuf/*.pb.h that
