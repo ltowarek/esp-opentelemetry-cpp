@@ -44,4 +44,7 @@ When `CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED` is off, the component still comp
 
 ## Examples
 
-See [`examples/basic/`](examples/basic/) for a minimal ESP32-S3 application.
+| Example | Description |
+|---------|-------------|
+| [`examples/simple/`](examples/simple/) | Minimal ESP32-S3 application. Uses `OStreamSpanExporter` + `SimpleSpanProcessor` to print spans to the serial console. No Wi-Fi required. Runs under QEMU. |
+| [`examples/batch/`](examples/batch/) | Wi-Fi + `BatchSpanProcessor` + OTLP/HTTP. Connects to a Wi-Fi network and exports a batch of spans to an OTLP collector. |
