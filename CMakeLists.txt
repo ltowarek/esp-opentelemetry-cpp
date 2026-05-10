@@ -14,7 +14,6 @@
 
 set(ESP_OPENTELEMETRY_SRCS
     src/esp_opentelemetry.cpp
-    src/propagation.cpp
     src/esp_posix_shims.c
 )
 
@@ -35,7 +34,7 @@ set(ESP_OPENTELEMETRY_SRCS
 set(ESP_OPENTELEMETRY_CPP_API_INCLUDE
     "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/api/include")
 
-set(ESP_OPENTELEMETRY_REQUIRES esp_http_client json pthread)
+set(ESP_OPENTELEMETRY_REQUIRES esp_http_client pthread)
 
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}
