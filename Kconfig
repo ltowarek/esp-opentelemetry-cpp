@@ -1,0 +1,14 @@
+menu "ESP OpenTelemetry"
+
+    config ESP_OPENTELEMETRY_HEAP_ALIGN_WORKAROUND
+        bool "Override operator new to enforce alignof(max_align_t) alignment"
+        default y
+        help
+            ESP-IDF's heap allocator uses sizeof(void*)=4 as its alignment
+            granularity, violating the C/C++ requirement that malloc and
+            operator new return memory aligned to alignof(max_align_t)=8.
+            This override replaces the global operator new with one backed by
+            heap_caps_aligned_alloc to guarantee 8-byte alignment.
+            Disable only to reproduce the underlying heap alignment bug.
+
+endmenu

@@ -18,6 +18,10 @@ set(ESP_OPENTELEMETRY_SRCS
     src/esp_posix_shims.c
 )
 
+if(CONFIG_ESP_OPENTELEMETRY_HEAP_ALIGN_WORKAROUND)
+    list(APPEND ESP_OPENTELEMETRY_SRCS src/esp_heap_align.cpp)
+endif()
+
 # NOTE: esp_http_client_transport.cpp is intentionally *not* listed
 # here. When CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED is on, it is
 # compiled as the sole source of the vendored
@@ -57,6 +61,12 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=nanosleep" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=pthread_atfork" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=sysconf" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
+# Pull in esp_heap_align.cpp.o even before the linker encounters a C++
+# allocation site.  _Znwj is operator new(unsigned int) — the Itanium ABI
+# mangled name on 32-bit targets where size_t == unsigned int (Xtensa, RISC-V).
+if(CONFIG_ESP_OPENTELEMETRY_HEAP_ALIGN_WORKAROUND)
+    idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
+endif()
 
 if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     # opentelemetry-cpp's architecture autodetection does not understand
