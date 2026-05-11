@@ -2,8 +2,6 @@
 
 #include "sdkconfig.h"
 
-#include "propagation.hpp"
-
 #include "opentelemetry/trace/provider.h"
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
@@ -114,13 +112,4 @@ opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer>
 esp_opentelemetry_tracer() {
   auto provider = trace_api::Provider::GetTracerProvider();
   return provider->GetTracer(kTracerName, kTracerVersion);
-}
-
-void esp_opentelemetry_inject_traceparent(cJSON* obj) {
-  esp_opentelemetry::inject_traceparent(obj);
-}
-
-opentelemetry::context::Context
-esp_opentelemetry_extract_traceparent(const cJSON* obj) {
-  return esp_opentelemetry::extract_traceparent(obj);
 }

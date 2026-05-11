@@ -9,12 +9,11 @@ menu "Tracing"
         default ""
         help
             Reachable from the device over Wi-Fi. The ESP32 cannot resolve
-            the Docker DNS name "jaeger" used by the other services - point
-            this at the host LAN IP running the observability stack.
+            Docker DNS names - point this at the host LAN IP running the
+            observability stack.
 
     config ESP_OPENTELEMETRY_SERVICE_NAME
         string "Service name resource attribute"
-        depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default "esp-opentelemetry-cpp"
 
     config ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE

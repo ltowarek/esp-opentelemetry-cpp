@@ -26,10 +26,6 @@ auto tracer = esp_opentelemetry_tracer();
 auto span   = tracer->StartSpan("my.operation");
 auto scope  = opentelemetry::trace::Scope(span);
 span->End();
-
-// Propagate context across protocol boundaries (e.g. cJSON payloads):
-esp_opentelemetry_inject_traceparent(json_object);
-auto ctx = esp_opentelemetry_extract_traceparent(json_object);
 ```
 
 Enable tracing via `idf.py menuconfig` → **Tracing** or set in `sdkconfig.defaults`:

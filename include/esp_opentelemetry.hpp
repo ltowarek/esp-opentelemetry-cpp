@@ -1,8 +1,5 @@
 // OpenTelemetry tracing facade for ESP-IDF firmware.
 //
-// Mirrors controller/src/controller/tracing.py so the W3C traceparent
-// produced on the JS/Python side chains cleanly into device-side spans.
-//
 // Usage:
 //
 //   esp_opentelemetry_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);   // once, after Wi-Fi is up
@@ -18,11 +15,8 @@
 
 #pragma once
 
-#include "opentelemetry/context/context.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/trace/tracer.h"
-
-#include <cJSON.h>
 
 // Initialise the global tracer provider, configure the W3C traceparent
 // propagator, and wire up an OTLP/HTTP exporter backed by esp_http_client.
@@ -34,14 +28,3 @@ void esp_opentelemetry_setup(const char* service_name);
 // a provider.
 opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer>
 esp_opentelemetry_tracer();
-
-// Inject the active trace context onto a cJSON object as "traceparent" /
-// "tracestate" string members, mirroring
-// controller.tracing.inject_trace_context.
-void esp_opentelemetry_inject_traceparent(cJSON* obj);
-
-// Extract a trace context from a cJSON object's "traceparent" /
-// "tracestate" members. Returns the current context when the keys are
-// absent. Mirrors controller.tracing.extract_trace_context.
-opentelemetry::context::Context
-esp_opentelemetry_extract_traceparent(const cJSON* obj);
