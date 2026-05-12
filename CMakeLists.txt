@@ -82,7 +82,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
     # Skip libcurl entirely; we supply HttpClientFactory via
     # opentelemetry_http_client_esp below.
-    set(WITH_CUSTOM_HTTP_CLIENT ON  CACHE BOOL "" FORCE)
+    set(WITH_HTTP_CLIENT_CURL   OFF CACHE BOOL "" FORCE)
 
     # Materialize Abseil + libprotobuf + the synthesized Protobuf package
     # config *before* opentelemetry-cpp's CMake runs. Without this, the
@@ -105,7 +105,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
         ${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp)
 
     # Provide the esp_http_client-backed HttpClientFactory that the OTLP HTTP
-    # exporter calls through. WITH_CUSTOM_HTTP_CLIENT=ON leaves the exporter
+    # exporter calls through. WITH_HTTP_CLIENT_CURL=OFF leaves the exporter
     # without a linked factory; we supply one here via a named STATIC target
     # PRIVATE-linked into the exporter so the factory symbols sit in the right
     # place on the link line.
