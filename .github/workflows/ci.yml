@@ -40,6 +40,7 @@ jobs:
     needs: build-docker
     permissions:
       contents: read
+      actions: read
 
     runs-on: ubuntu-latest
 
@@ -73,6 +74,14 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    - name: Cache ccache
+      uses: actions/cache@v5
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-idf-${{ hashFiles('.devcontainer/cpp/Dockerfile') }}
+        restore-keys: |
+          ccache-${{ runner.os }}-idf-
 
     - name: Activate esp-idf
       run: |

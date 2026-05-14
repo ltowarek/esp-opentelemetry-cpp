@@ -2,8 +2,11 @@ FROM espressif/idf:release-v5.3
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
+    ccache \
     curl \
     locales
+
+ENV IDF_CCACHE_ENABLE=1
 
 COPY install-gh.sh /tmp/install-gh.sh
 RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
