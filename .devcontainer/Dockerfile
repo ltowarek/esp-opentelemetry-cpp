@@ -6,6 +6,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     curl \
     locales
 
+ENV IDF_CCACHE_ENABLE=1
+
 COPY install-gh.sh /tmp/install-gh.sh
 RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
 
@@ -27,8 +29,6 @@ USER $USERNAME
 RUN git config --global --add safe.directory /opt/esp/idf/components/openthread/openthread
 RUN echo "source $IDF_PATH/export.sh > /dev/null 2>&1" >> $HOME/.bashrc
 RUN echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-RUN echo 'export CCACHE_DIR="$HOME/.ccache"' >> ~/.bashrc \
-    && echo 'export IDF_CCACHE_ENABLE=1' >> ~/.bashrc
 
 COPY --chown=$USERNAME:$USERNAME install-claude.sh /tmp/install-claude.sh
 RUN bash /tmp/install-claude.sh && rm /tmp/install-claude.sh
