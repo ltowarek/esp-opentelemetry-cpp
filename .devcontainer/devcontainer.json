@@ -6,7 +6,8 @@
     "workspaceFolder": "/workspaces/esp-opentelemetry-cpp",
     "mounts": [
         "source=claude-code-config,target=/home/vscode/.claude,type=volume",
-        "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind,consistency=cached"
+        "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind,consistency=cached",
+        "source=ccache,target=/home/vscode/.ccache,type=volume"
     ],
     "containerEnv": {
         "CLAUDE_CONFIG_DIR": "/home/vscode/.claude"
