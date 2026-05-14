@@ -1,3 +1,6 @@
+// Workaround: int32_t is `long` not `int` on Xtensa GCC 13.2; bool/int/pid_t
+// do not match any EncodeVarint overload — ambiguous call. Upstream: Abseil.
+//
 // Workaround for Abseil EncodeVarint ambiguous overloads on Xtensa
 // GCC 13.2. On this 32-bit platform, int/pid_t/bool do not match any
 // of the four explicit EncodeVarint overloads (uint64_t, int64_t,

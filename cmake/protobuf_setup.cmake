@@ -116,7 +116,7 @@ endif()
 # (ABSL_HAVE_MMAP). ESP-IDF's newlib does not ship <sys/mman.h>.
 # Inject a stub header directory so the #include resolves to a no-op
 # implementation that always returns MAP_FAILED.
-set(ESP_OPENTELEMETRY_SHIMS_DIR "${CMAKE_CURRENT_LIST_DIR}/../shims")
+set(ESP_OPENTELEMETRY_SHIMS_DIR "${CMAKE_CURRENT_LIST_DIR}/../src/workarounds")
 include_directories(BEFORE SYSTEM "${ESP_OPENTELEMETRY_SHIMS_DIR}")
 
 # Embedded-friendly Abseil defaults.
@@ -198,7 +198,7 @@ set(_ABSL_LOG_TARGETS
 foreach(_t IN LISTS _ABSL_LOG_TARGETS)
     if(TARGET ${_t})
         target_compile_options(${_t} PRIVATE
-            -include "${ESP_OPENTELEMETRY_SHIMS_DIR}/absl_encode_varint_bool_fix.h")
+            -include "${ESP_OPENTELEMETRY_SHIMS_DIR}/absl_varint_bool.h")
     endif()
 endforeach()
 
