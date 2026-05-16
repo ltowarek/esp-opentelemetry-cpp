@@ -272,11 +272,12 @@ std::shared_ptr<http_client::HttpClient> MakeEspHttpClient() {
 
 // --- esp_http_client-backed HttpClientFactory ----------------------------
 //
-// Implements the three free functions that the OTLP exporter calls via
-// HttpClientFactory. This file is compiled into the standalone
-// opentelemetry_http_client_esp target (see CMakeLists.txt), which is
-// PRIVATE-linked into opentelemetry_exporter_otlp_http_client in place
-// of the default libcurl backend.
+// Provides GetDefaultHttpClientFactory(), the free function that OtlpHttpClient
+// calls to obtain a transport when no factory is explicitly supplied. This file
+// is compiled into the standalone opentelemetry_http_client_esp target (see
+// CMakeLists.txt), which is PRIVATE-linked into
+// opentelemetry_exporter_otlp_http_client in place of the default libcurl
+// backend.
 
 #include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/sdk/common/thread_instrumentation.h"
@@ -286,18 +287,30 @@ namespace ext {
 namespace http {
 namespace client {
 
-std::shared_ptr<HttpClient> HttpClientFactory::Create() {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
+namespace {
 
-std::shared_ptr<HttpClient> HttpClientFactory::Create(
-    const std::shared_ptr<sdk::common::ThreadInstrumentation>& /*unused*/) {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
+class EspHttpClientFactory : public HttpClientFactory {
+public:
+  std::shared_ptr<HttpClient> Create() override {
+    return esp_opentelemetry::MakeEspHttpClient();
+  }
 
-std::shared_ptr<HttpClientSync> HttpClientFactory::CreateSync() {
-  // HttpClientSync is unused by the OTLP exporter; return nullptr.
-  return nullptr;
+  std::shared_ptr<HttpClient> Create(
+      const std::shared_ptr<sdk::common::ThreadInstrumentation>& /*unused*/) override {
+    return esp_opentelemetry::MakeEspHttpClient();
+  }
+
+  std::shared_ptr<HttpClientSync> CreateSync() override {
+    // HttpClientSync is unused by the OTLP exporter; return nullptr.
+    return nullptr;
+  }
+};
+
+}  // namespace
+
+std::shared_ptr<HttpClientFactory> GetDefaultHttpClientFactory() {
+  static auto instance = std::make_shared<EspHttpClientFactory>();
+  return instance;
 }
 
 }  // namespace client
