@@ -1,3 +1,6 @@
+// Workaround: sys/mman.h absent from ESP-IDF newlib; Abseil LowLevelAlloc
+// calls mmap to grow its arena. Upstream: Abseil. ESP-IDF newlib (all versions).
+//
 // Stub sys/mman.h for ESP-IDF (Xtensa/newlib).
 //
 // ESP-IDF's newlib does not ship sys/mman.h. Abseil's LowLevelAlloc uses

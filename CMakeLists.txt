@@ -13,8 +13,8 @@
 # third_party/ and built as part of this component.
 
 set(ESP_OPENTELEMETRY_SRCS
-    src/esp_opentelemetry.cpp
-    src/esp_posix_shims.c
+    src/integration/esp_opentelemetry.cpp
+    src/workarounds/posix_shims.c
 )
 
 # NOTE: esp_http_client_transport.cpp is intentionally *not* listed
@@ -39,7 +39,7 @@ set(ESP_OPENTELEMETRY_REQUIRES esp_http_client pthread)
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}
     INCLUDE_DIRS "include" "${ESP_OPENTELEMETRY_CPP_API_INCLUDE}"
-    PRIV_INCLUDE_DIRS "src"
+    PRIV_INCLUDE_DIRS "src/integration"
     REQUIRES ${ESP_OPENTELEMETRY_REQUIRES}
 )
 
@@ -89,7 +89,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     # (autoprobes for hostent/off_t/recv/send all fail), and we never
     # link the curl-based HTTP transport anyway — our custom
     # esp_http_client-based HttpClient is installed at runtime.
-    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/shims")
+    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
     # WITH_OTLP_HTTP=ON unconditionally pulls curl in as the SDK's default
     # HttpClient backend. We provide our own esp_http_client-based
@@ -189,14 +189,14 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
     if(TARGET opentelemetry_http_client_curl)
         set_property(TARGET opentelemetry_http_client_curl
             PROPERTY SOURCES
-                "${CMAKE_CURRENT_LIST_DIR}/src/esp_http_client_transport.cpp")
+                "${CMAKE_CURRENT_LIST_DIR}/src/integration/esp_http_client_transport.cpp")
         # Link against the ESP-IDF component target so all transitive
         # include dirs (esp_http_client, esp_event, esp_common, log,
         # freertos, lwip, ...) propagate automatically.
         target_link_libraries(opentelemetry_http_client_curl PRIVATE
             idf::esp_http_client)
         target_include_directories(opentelemetry_http_client_curl PRIVATE
-            "${CMAKE_CURRENT_LIST_DIR}/src")
+            "${CMAKE_CURRENT_LIST_DIR}/src/integration")
     endif()
 
     # Target-level .pb.cc files produced by opentelemetry-proto at
