@@ -25,6 +25,9 @@ ENV CCACHE_DIR=/home/${USERNAME}/.ccache
 RUN mkdir -p /home/$USERNAME/.claude && \
     chown -R $USERNAME:$USERNAME /home/$USERNAME/.claude
 
+RUN mkdir -p /home/$USERNAME/.ccache && \
+    chown -R $USERNAME:$USERNAME /home/$USERNAME/.ccache
+
 USER $USERNAME
 
 RUN git config --global --add safe.directory /opt/esp/idf/components/openthread/openthread
