@@ -74,8 +74,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ${{ github.workspace }}/.ccache
-        key: ccache-${{ runner.os }}-idf-${{ hashFiles('.devcontainer/Dockerfile') }}
+        key: ccache-${{ runner.os }}-idf-${{ matrix.path }}-${{ github.run_id }}
         restore-keys: |
+          ccache-${{ runner.os }}-idf-${{ matrix.path }}-
           ccache-${{ runner.os }}-idf-
 
     - name: Activate esp-idf
