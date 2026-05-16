@@ -6,8 +6,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     curl \
     locales
 
-ENV IDF_CCACHE_ENABLE=1
-
 COPY install-gh.sh /tmp/install-gh.sh
 RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
 
@@ -20,6 +18,9 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID --create-home --shell /bin/bash $USERNAME
+
+ENV IDF_CCACHE_ENABLE=1
+ENV CCACHE_DIR=/home/${USERNAME}/.ccache
 
 RUN mkdir -p /home/$USERNAME/.claude && \
     chown -R $USERNAME:$USERNAME /home/$USERNAME/.claude
