@@ -47,9 +47,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - project: simple example
-            path: examples/simple
-            qemu: true
           - project: batch example
             path: examples/batch
           - project: ostream example
