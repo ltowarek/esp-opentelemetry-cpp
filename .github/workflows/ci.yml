@@ -74,7 +74,7 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.ccache
-        key: ccache-${{ runner.os }}-idf-${{ hashFiles('.devcontainer/cpp/Dockerfile') }}
+        key: ccache-${{ runner.os }}-idf-${{ hashFiles('.devcontainer/Dockerfile') }}
         restore-keys: |
           ccache-${{ runner.os }}-idf-
 
