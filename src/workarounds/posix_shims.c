@@ -1,3 +1,8 @@
+// Workaround: nanosleep missing from ESP-IDF newlib; pthread_atfork missing
+// (causes libnosys collision); sysconf(_SC_PAGESIZE) returns -1 (overflows
+// Abseil LowLevelAlloc); THREADPTR uninitialised before FreeRTOS scheduler
+// (crashes thread_local during global ctors). Upstream: Abseil, ESP-IDF newlib.
+//
 // POSIX shims for third-party code (Abseil cctz / clock.cc, SpinLock)
 // cross-compiled to the Xtensa newlib toolchain.
 //

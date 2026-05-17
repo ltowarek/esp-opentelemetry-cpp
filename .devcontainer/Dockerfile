@@ -2,6 +2,7 @@ FROM espressif/idf:release-v5.3
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
+    ccache \
     curl \
     locales
 
@@ -18,8 +19,14 @@ ARG USER_GID=$USER_UID
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID --create-home --shell /bin/bash $USERNAME
 
+ENV IDF_CCACHE_ENABLE=1
+ENV CCACHE_DIR=/home/${USERNAME}/.ccache
+
 RUN mkdir -p /home/$USERNAME/.claude && \
     chown -R $USERNAME:$USERNAME /home/$USERNAME/.claude
+
+RUN mkdir -p /home/$USERNAME/.ccache && \
+    chown -R $USERNAME:$USERNAME /home/$USERNAME/.ccache
 
 USER $USERNAME
 

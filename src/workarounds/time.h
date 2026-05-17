@@ -1,3 +1,6 @@
+// Workaround: ESP-IDF newlib struct tm lacks tm_gmtoff/tm_zone; Abseil cctz
+// includes them unconditionally. Upstream: Abseil cctz. ESP-IDF newlib (all versions).
+//
 // Shim time.h for Abseil on ESP-IDF (Xtensa/newlib).
 //
 // ESP-IDF's newlib struct tm lacks the BSD/GNU tm_gmtoff and tm_zone

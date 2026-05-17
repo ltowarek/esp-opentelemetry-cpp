@@ -40,17 +40,20 @@ jobs:
     needs: build-docker
     permissions:
       contents: read
+      actions: read
 
     runs-on: ubuntu-latest
 
     strategy:
       matrix:
         include:
-          - project: simple example
-            path: examples/simple
-            qemu: true
           - project: batch example
             path: examples/batch
+          - project: ostream example
+            path: examples/ostream
+            qemu: true
+          - project: propagation example
+            path: examples/propagation
 
     container:
       image: ghcr.io/ltowarek/esp-opentelemetry-cpp-devcontainer
@@ -69,12 +72,23 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Cache ccache
+      uses: actions/cache@v5
+      with:
+        path: ${{ github.workspace }}/.ccache
+        key: ccache-${{ runner.os }}-idf-${{ matrix.path }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ runner.os }}-idf-${{ matrix.path }}-
+          ccache-${{ runner.os }}-idf-
+
     - name: Activate esp-idf
       run: |
         source $IDF_PATH/export.sh
         echo "$PATH" >> $GITHUB_PATH
 
     - name: Build
+      env:
+        CCACHE_DIR: ${{ github.workspace }}/.ccache
       run: idf.py build
       working-directory: ${{ matrix.path }}
 
