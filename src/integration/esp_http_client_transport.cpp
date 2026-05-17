@@ -203,7 +203,7 @@ private:
     if (uri.empty()) return url_;
     if (uri.rfind("http://", 0) == 0 || uri.rfind("https://", 0) == 0) return uri;
     // uri is a relative path; strip any existing path from url_ to get the base
-    // (mirrors curl transport: host_ = scheme://host:port/)
+    // uri is relative; strip path from url_ to get scheme://host:port
     auto scheme_end = url_.find("://");
     if (scheme_end == std::string::npos) return url_;
     auto path_start = url_.find('/', scheme_end + 3);
@@ -272,12 +272,11 @@ std::shared_ptr<http_client::HttpClient> MakeEspHttpClient() {
 
 // --- esp_http_client-backed HttpClientFactory ----------------------------
 //
-// Provides GetDefaultHttpClientFactory(), the free function that OtlpHttpClient
-// calls to obtain a transport when no factory is explicitly supplied. This file
-// is compiled into the standalone opentelemetry_http_client_esp target (see
-// CMakeLists.txt), which is PRIVATE-linked into
-// opentelemetry_exporter_otlp_http_client in place of the default libcurl
-// backend.
+// Implements GetDefaultHttpClientFactory() so the OTLP HTTP exporter obtains
+// an esp_http_client-backed transport. Compiled into opentelemetry_http_client_esp
+// (see CMakeLists.txt), which is PRIVATE-linked into
+// opentelemetry_exporter_otlp_http_client. WITH_HTTP_CLIENT_CURL=OFF ensures no
+// libcurl backend is built; this target is the sole HttpClientFactory provider.
 
 #include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/sdk/common/thread_instrumentation.h"
@@ -301,8 +300,7 @@ public:
   }
 
   std::shared_ptr<HttpClientSync> CreateSync() override {
-    // HttpClientSync is unused by the OTLP exporter; return nullptr.
-    return nullptr;
+    return nullptr;  // OTLP exporter never calls CreateSync
   }
 };
 
