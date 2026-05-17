@@ -63,7 +63,7 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 
 | File | What it provides |
 |------|-----------------|
-| `src/integration/esp_http_client_transport.cpp` | `HttpClientFactory` backed by `esp_http_client`, replacing libcurl for the OTLP/HTTP exporter |
+| `src/integration/esp_http_client_transport.cpp` | `HttpClientFactory` backed by `esp_http_client`; libcurl is excluded via `WITH_HTTP_CLIENT_CURL=OFF` |
 | `src/integration/esp_opentelemetry.cpp` | `esp_opentelemetry_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor, resource, and W3C propagator via Kconfig |
 
 ## Tested OTel C++ SDK features

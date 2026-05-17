@@ -203,7 +203,7 @@ private:
     if (uri.empty()) return url_;
     if (uri.rfind("http://", 0) == 0 || uri.rfind("https://", 0) == 0) return uri;
     // uri is a relative path; strip any existing path from url_ to get the base
-    // (mirrors curl transport: host_ = scheme://host:port/)
+    // uri is relative; strip path from url_ to get scheme://host:port
     auto scheme_end = url_.find("://");
     if (scheme_end == std::string::npos) return url_;
     auto path_start = url_.find('/', scheme_end + 3);
@@ -270,14 +270,13 @@ std::shared_ptr<http_client::HttpClient> MakeEspHttpClient() {
 
 }  // namespace esp_opentelemetry
 
-// --- Replace the default opentelemetry-cpp HTTP transport factory -----------
+// --- esp_http_client-backed HttpClientFactory ----------------------------
 //
-// opentelemetry_http_client_curl ships three free functions that the
-// OTLP exporter calls via HttpClientFactory::Create / CreateSync. The
-// default implementation uses libcurl. We build the same target from
-// this source file instead (see CMakeLists.txt), redirecting the factory
-// to our esp_http_client-backed client. This avoids cross-compiling libcurl
-// for Xtensa while keeping the opentelemetry-cpp link graph intact.
+// Implements GetDefaultHttpClientFactory() so the OTLP HTTP exporter obtains
+// an esp_http_client-backed transport. Compiled into opentelemetry_http_client_esp
+// (see CMakeLists.txt), which is PRIVATE-linked into
+// opentelemetry_exporter_otlp_http_client. WITH_HTTP_CLIENT_CURL=OFF ensures no
+// libcurl backend is built; this target is the sole HttpClientFactory provider.
 
 #include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/sdk/common/thread_instrumentation.h"
@@ -287,18 +286,29 @@ namespace ext {
 namespace http {
 namespace client {
 
-std::shared_ptr<HttpClient> HttpClientFactory::Create() {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
+namespace {
 
-std::shared_ptr<HttpClient> HttpClientFactory::Create(
-    const std::shared_ptr<sdk::common::ThreadInstrumentation>& /*unused*/) {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
+class EspHttpClientFactory : public HttpClientFactory {
+public:
+  std::shared_ptr<HttpClient> Create() override {
+    return esp_opentelemetry::MakeEspHttpClient();
+  }
 
-std::shared_ptr<HttpClientSync> HttpClientFactory::CreateSync() {
-  // HttpClientSync is unused by the OTLP exporter; return nullptr.
-  return nullptr;
+  std::shared_ptr<HttpClient> Create(
+      const std::shared_ptr<sdk::common::ThreadInstrumentation>& /*unused*/) override {
+    return esp_opentelemetry::MakeEspHttpClient();
+  }
+
+  std::shared_ptr<HttpClientSync> CreateSync() override {
+    return nullptr;  // OTLP exporter never calls CreateSync
+  }
+};
+
+}  // namespace
+
+std::shared_ptr<HttpClientFactory> GetDefaultHttpClientFactory() {
+  static auto instance = std::make_shared<EspHttpClientFactory>();
+  return instance;
 }
 
 }  // namespace client

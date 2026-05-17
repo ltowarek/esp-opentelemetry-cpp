@@ -1,5 +1,4 @@
 // esp_http_client-backed HTTP client for opentelemetry-cpp's OTLP exporter.
-// Replaces the default libcurl transport in the firmware image.
 
 #pragma once
 
