@@ -81,21 +81,20 @@ jobs:
           ccache-${{ runner.os }}-idf-${{ matrix.path }}-
           ccache-${{ runner.os }}-idf-
 
-    - name: Activate esp-idf
-      run: |
-        source $IDF_PATH/export.sh
-        echo "$PATH" >> $GITHUB_PATH
-
     - name: Build
       env:
         CCACHE_DIR: ${{ github.workspace }}/.ccache
-      run: idf.py build
+      run: |
+        source $IDF_PATH/export.sh
+        idf.py build
       working-directory: ${{ matrix.path }}
 
     - name: Run in QEMU
       if: ${{ matrix.qemu }}
       working-directory: ${{ matrix.path }}
-      run: bash test_qemu.sh
+      run: |
+        source $IDF_PATH/export.sh
+        bash test_qemu.sh
 
   ci-status:
     needs: [build-docker, build]

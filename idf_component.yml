@@ -3,4 +3,4 @@ description: ESP-IDF component integrating OpenTelemetry C++ SDK with ESP32 firm
 url: https://github.com/ltowarek/esp-opentelemetry-cpp
 
 dependencies:
-  idf: ">=5.0.0"
+  idf: ">=6.0.0"

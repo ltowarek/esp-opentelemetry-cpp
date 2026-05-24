@@ -4,7 +4,7 @@ ESP-IDF component integrating OpenTelemetry C++ SDK with ESP32 firmware
 
 ## Scope
 
-This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK is upstream, unmodified. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
+This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK submodule tracks an upstream release tag and contains no local modifications. Where hardware constraints require deviations from upstream behaviour, the `src/workarounds/` subtree provides replacement translation units wired in through CMake `set_property(SOURCES)` overrides rather than edits to the submodule. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
 
 ## Usage
 
@@ -56,6 +56,7 @@ The `src/workarounds/` subtree contains code that exists purely to paper over up
 | `src/workarounds/absl_varint_bool.h` | `int32_t` is `long` not `int` on Xtensa; `bool`/`int`/`pid_t` do not match any `EncodeVarint` overload — ambiguous call on GCC 13.2 | Abseil |
 | `src/workarounds/sys/mman.h` | `sys/mman.h` absent from newlib; Abseil `LowLevelAlloc` calls `mmap` to grow its arena | Abseil |
 | `src/workarounds/time.h` | `struct tm` in newlib lacks `tm_gmtoff`; Abseil cctz includes it unconditionally | Abseil cctz |
+| `src/workarounds/otlp_http_exporter_esp.cc` | ESP-IDF `malloc` guarantees only 4-byte alignment; `google::protobuf::Arena` uses `TaggedAllocationPolicyPtr` (bits 0–2 as tag bits, `kTagsMask=7`) and requires 8-byte aligned pointers. Without an aligned `initial_block`, `get()` strips bit 2, misreads the block as a function pointer, and crashes at `PC=0x00010000` (`InstrFetchProhibited`). Replaces `otlp_http_exporter.cc` via `set_property(SOURCES)`. | protobuf / opentelemetry-cpp |
 
 ## ESP-specific integrations
 
