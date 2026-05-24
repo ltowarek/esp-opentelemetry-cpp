@@ -56,7 +56,7 @@ The `src/workarounds/` subtree contains code that exists purely to paper over up
 | `src/workarounds/absl_varint_bool.h` | `int32_t` is `long` not `int` on Xtensa; `bool`/`int`/`pid_t` do not match any `EncodeVarint` overload — ambiguous call on GCC 13.2 | Abseil |
 | `src/workarounds/sys/mman.h` | `sys/mman.h` absent from newlib; Abseil `LowLevelAlloc` calls `mmap` to grow its arena | Abseil |
 | `src/workarounds/time.h` | `struct tm` in newlib lacks `tm_gmtoff`; Abseil cctz includes it unconditionally | Abseil cctz |
-| `src/workarounds/otlp_http_exporter_esp.cc` | ESP-IDF `malloc` guarantees only 4-byte alignment; `google::protobuf::Arena` uses `TaggedAllocationPolicyPtr` (bits 0–2 as tag bits, `kTagsMask=7`) and requires 8-byte aligned pointers. Without an aligned `initial_block`, `get()` strips bit 2, misreads the block as a function pointer, and crashes at `PC=0x00010000` (`InstrFetchProhibited`). Replaces `otlp_http_exporter.cc` via `set_property(SOURCES)`. | protobuf / opentelemetry-cpp |
+| `src/workarounds/esp_heap_align.cpp` | ESP-IDF heap uses `sizeof(void*)=4` as its alignment granularity; `alignof(std::max_align_t)==8` on Xtensa; `operator new` is therefore non-conforming. `google::protobuf::Arena` / `TaggedAllocationPolicyPtr` stores flags in the low 3 bits of a pointer (`kPtrMask=~7`), requiring 8-byte alignment. A 4-byte-aligned block causes `get()` to read 4 bytes before the struct, treating `max_block_size` (`0x00010000`) as a function pointer → `InstrFetchProhibited` at `PC=0x00010000`. Replaces the six standard replaceable allocation operators with `heap_caps_aligned_alloc`-backed versions. | ESP-IDF heap |
 
 ## ESP-specific integrations
 
