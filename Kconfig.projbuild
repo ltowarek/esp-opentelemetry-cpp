@@ -1,4 +1,8 @@
-menu "Tracing"
+menu "OpenTelemetry"
+    config ESP_OPENTELEMETRY_SERVICE_NAME
+        string "Service name resource attribute"
+        default "esp-opentelemetry-cpp"
+
     config ESP_OPENTELEMETRY_TRACING_ENABLED
         bool "Enable OpenTelemetry tracing"
         default n
@@ -12,10 +16,6 @@ menu "Tracing"
             Docker DNS names - point this at the host LAN IP running the
             observability stack.
 
-    config ESP_OPENTELEMETRY_SERVICE_NAME
-        string "Service name resource attribute"
-        default "esp-opentelemetry-cpp"
-
     config ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE
         int "Max queued spans before drop"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
@@ -25,4 +25,8 @@ menu "Tracing"
         int "Batch span processor schedule delay (ms)"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default 5000
+
+    config ESP_OPENTELEMETRY_METRICS_ENABLED
+        bool "Enable OpenTelemetry metrics"
+        default n
 endmenu
