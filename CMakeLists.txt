@@ -1,10 +1,11 @@
 # esp-opentelemetry-cpp — ESP-IDF component integrating opentelemetry-cpp
 # with the ESP32 / Xtensa toolchain.
 #
-# The vendored SDK (third_party/opentelemetry-cpp) is only added to the
-# build when CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED is set, keeping the
-# firmware image small on builds that do not need tracing. When disabled,
-# the component still compiles and exposes the esp_opentelemetry.hpp API
+# The vendored SDK (third_party/opentelemetry-cpp) is only compiled when
+# CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED or
+# CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is set, keeping the firmware
+# image small on builds that need neither. When both are disabled, the
+# component still compiles and exposes the esp_opentelemetry.hpp API
 # through the header-only opentelemetry-cpp api/ tree, and every tracer
 # call routes to the SDK's built-in no-op provider.
 #
@@ -19,8 +20,9 @@ set(ESP_OPENTELEMETRY_SRCS
 )
 
 # NOTE: esp_http_client_transport.cpp is intentionally *not* listed
-# here. When CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED is on, it is
-# compiled as the sole source of the vendored
+# here. When CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED or
+# CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is on, it is compiled as the
+# sole source of the vendored
 # `opentelemetry_http_client_curl` target (see the set_property(...
 # SOURCES ...) call below), so it sits on the opentelemetry-cpp side of
 # the link graph instead of our component. This keeps the factory free
@@ -63,7 +65,7 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
 # so the conforming operator new wins over any weak default.
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
     # opentelemetry-cpp's architecture autodetection does not understand
     # Xtensa; short-circuit it by exporting ARCH to the value it uses for
     # debug logging only. The SDK's actual codegen does not depend on this
@@ -216,12 +218,19 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
         "${CMAKE_CURRENT_LIST_DIR}/third_party/protobuf/src"
         "${CMAKE_CURRENT_LIST_DIR}/third_party/abseil-cpp")
 
-    target_link_libraries(${COMPONENT_LIB}
-        PUBLIC
+    if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC
             opentelemetry_trace
-            opentelemetry_exporter_otlp_http
-            opentelemetry_common
-        INTERFACE
-            protobuf::libprotobuf
-    )
+            opentelemetry_exporter_otlp_http)
+    endif()
+
+    if(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC
+            opentelemetry_metrics
+            opentelemetry_exporter_otlp_http_metric)
+    endif()
+
+    target_link_libraries(${COMPONENT_LIB}
+        PUBLIC opentelemetry_common
+        INTERFACE protobuf::libprotobuf)
 endif()

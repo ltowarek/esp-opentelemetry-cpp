@@ -28,7 +28,7 @@ auto scope  = opentelemetry::trace::Scope(span);
 span->End();
 ```
 
-Enable tracing via `idf.py menuconfig` → **Tracing** or set in `sdkconfig.defaults`:
+Enable tracing via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfig.defaults`:
 
 ```
 CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
@@ -42,9 +42,10 @@ When `CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED` is off, the component still comp
 
 | Example | Description | Hardware needed |
 |---------|-------------|-----------------|
-| [`examples/ostream/`](examples/ostream/) | `OStreamSpanExporter` + `SimpleSpanProcessor`; prints spans to the serial console. | None (QEMU) |
-| [`examples/batch/`](examples/batch/) | `BatchSpanProcessor` + `OtlpHttpExporter`; Wi-Fi setup, PSRAM thread stack, exports spans to an OTLP collector. | Wi-Fi |
-| [`examples/propagation/`](examples/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
+| [`examples/tracing/ostream/`](examples/tracing/ostream/) | `OStreamSpanExporter` + `SimpleSpanProcessor`; prints spans to the serial console. | None (QEMU) |
+| [`examples/tracing/batch/`](examples/tracing/batch/) | `BatchSpanProcessor` + `OtlpHttpExporter`; Wi-Fi setup, PSRAM thread stack, exports spans to an OTLP collector. | Wi-Fi |
+| [`examples/tracing/propagation/`](examples/tracing/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
+| [`examples/metrics/ostream/`](examples/metrics/ostream/) | `OStreamMetricExporter` + `PeriodicExportingMetricReader`; counter and observable gauge printed to the serial console. | None (QEMU) |
 
 ## Workarounds
 
@@ -73,13 +74,17 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 
 | Feature | Status | Example |
 |---------|--------|---------|
-| `OStreamSpanExporter` | Tested (QEMU) | [`examples/ostream/`](examples/ostream/) |
-| `SimpleSpanProcessor` | Tested (QEMU) | [`examples/ostream/`](examples/ostream/) |
-| `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/batch/`](examples/batch/) |
-| `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/batch/`](examples/batch/) |
-| W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/propagation/`](examples/propagation/) |
+| `OStreamSpanExporter` | Tested (QEMU) | [`examples/tracing/ostream/`](examples/tracing/ostream/) |
+| `SimpleSpanProcessor` | Tested (QEMU) | [`examples/tracing/ostream/`](examples/tracing/ostream/) |
+| `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/tracing/batch/`](examples/tracing/batch/) |
+| `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/tracing/batch/`](examples/tracing/batch/) |
+| W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/tracing/propagation/`](examples/tracing/propagation/) |
 | Span attributes (`SetAttribute`) | Tested | covered by all examples |
 | Span events (`AddEvent`) | Untested | — |
 | `OtlpHttpExporter` (protobuf) | Untested | — |
-| Metrics API | Not integrated | — |
+| `OStreamMetricExporter` | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| `PeriodicExportingMetricReader` | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| `OtlpHttpMetricExporter` | Linked | — |
+| Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| Observable gauge (`AddCallback`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
 | Logs API | Not integrated | — |
