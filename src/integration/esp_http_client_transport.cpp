@@ -6,9 +6,7 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -235,31 +233,14 @@ class EspHttpClient : public http_client::HttpClient {
 public:
   std::shared_ptr<http_client::Session> CreateSession(
       string_view url) noexcept override {
-    auto session =
-        std::make_shared<EspSession>(std::string(url.data(), url.size()));
-    std::lock_guard<std::mutex> lock(mu_);
-    sessions_.insert(session);
-    return session;
+    return std::make_shared<EspSession>(std::string(url.data(), url.size()));
   }
 
-  bool CancelAllSessions() noexcept override {
-    std::lock_guard<std::mutex> lock(mu_);
-    for (auto& s : sessions_) s->CancelSession();
-    return true;
-  }
+  bool CancelAllSessions() noexcept override { return true; }
 
-  bool FinishAllSessions() noexcept override {
-    std::lock_guard<std::mutex> lock(mu_);
-    for (auto& s : sessions_) s->FinishSession();
-    sessions_.clear();
-    return true;
-  }
+  bool FinishAllSessions() noexcept override { return true; }
 
   void SetMaxSessionsPerConnection(std::size_t) noexcept override {}
-
-private:
-  std::mutex mu_;
-  std::unordered_set<std::shared_ptr<EspSession>> sessions_;
 };
 
 }  // namespace
