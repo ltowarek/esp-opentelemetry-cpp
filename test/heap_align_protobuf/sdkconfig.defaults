@@ -1,0 +1,16 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+CONFIG_FREERTOS_HZ=1000
+
+# OpenTelemetry tracing + protobuf/Abseil push the binary past 3 MB.
+# Use a 4 MB flash with a custom layout giving ~3.25 MB for the app.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
+
+# The BatchSpanProcessor background thread needs more than the 3 KB default.
+CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=32768

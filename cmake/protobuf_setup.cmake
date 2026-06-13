@@ -167,6 +167,12 @@ function(_esp_opentelemetry_apply_int_override dir)
                 # .rodata via an empty macro definition fixes it
                 # without patching any submodule source.
                 "SHELL:-D ABSL_ATTRIBUTE_SECTION_VARIABLE(name)="
+                # ABSL_ATTRIBUTE_SECTION (used on functions, e.g. in
+                # low_level_alloc.h) also emits named sections that the
+                # ESP-IDF linker script doesn't know about, causing
+                # --orphan-handling=error failures. Neutralize it in the
+                # same way as ABSL_ATTRIBUTE_SECTION_VARIABLE above.
+                "SHELL:-D ABSL_ATTRIBUTE_SECTION(name)="
                 # Abseil's Mutex deadlock-detection (DebugOnlyDeadlockCheck)
                 # calls GetOrCreateCurrentThreadIdentity -> pthread_key_create
                 # -> pvTaskGetThreadLocalStoragePointer during protobuf's
@@ -175,7 +181,22 @@ function(_esp_opentelemetry_apply_int_override dir)
                 # NDEBUG sets kMutexDeadlockDetectionMode = kIgnore, turning
                 # DebugOnlyDeadlockCheck into a no-op. The uncontended lock
                 # fast-paths via CAS and never touches TLS.
-                -DNDEBUG)
+                -DNDEBUG
+                # ESP-IDF v6 platform headers (assert.h, sys/time.h,
+                # pthread.h, ...) use `#if CONFIG_*` guards for Kconfig
+                # symbols. Disabled options are absent from sdkconfig.h
+                # entirely (no #define to 0), so -Wundef fires for every
+                # ESP-IDF header that Abseil/protobuf happens to pull in.
+                -Wno-undef
+                # The ESP-IDF v6 toolchain uses GCC 15 with -Wall -Werror.
+                # Abseil and protobuf were written for their own CI
+                # toolchains and have several style patterns (redundant
+                # std::move, type-limit comparisons for wchar_t, etc.)
+                # that trigger new GCC 15 warnings. These are not bugs.
+                # Rather than enumerate every warning, turn off
+                # warning-as-error for all vendored external targets while
+                # keeping warnings visible in the build log.
+                -Wno-error)
         endif()
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
@@ -253,15 +274,19 @@ add_subdirectory(
 
 _esp_opentelemetry_apply_int_override("${PROTOBUF_SRC_DIR}")
 
-# IDF's Xtensa build sets -Werror=all. protobuf v34's arena code has
-# several -Wmaybe-uninitialized false positives (compiler can't prove
-# that a sequence of atomic CAS calls always assigns the variable).
-# Downgrade to a warning for the vendored protobuf targets only.
+# Belt-and-suspenders: libprotobuf may be defined via include() rather than
+# add_subdirectory(), landing it in the top-level protobuf directory scope
+# where _esp_opentelemetry_apply_int_override might not visit it. Apply
+# -Wno-error directly to each known target so GCC 15 false-positive warnings
+# (maybe-uninitialized, deprecated-declarations, etc.) don't break the build.
 foreach(_pb_target libprotobuf libprotobuf-lite utf8_range utf8_validity)
     if(TARGET ${_pb_target})
         target_compile_options(${_pb_target} PRIVATE
-            -Wno-error=maybe-uninitialized
-            -Wno-error=deprecated-declarations)
+            -Wno-error
+            # -Wno-error alone does not suppress -Werror=maybe-uninitialized
+            # when that flag is explicitly set by the ESP-IDF toolchain.
+            # Disable the warning itself for these vendored targets.
+            -Wno-maybe-uninitialized)
     endif()
 endforeach()
 

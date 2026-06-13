@@ -59,7 +59,7 @@ static std::unique_ptr<sdk_trace::SpanExporter> MakeExporter(
   options.compression        = "none";
   // HTTP transport is supplied by our esp_http_client-backed
   // HttpClientFactory (esp_http_client_transport.cpp),
-  // compiled into the opentelemetry_http_client_esp target.
+  // linked in as the `opentelemetry_http_client_curl` target.
   return std::unique_ptr<sdk_trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(options));
 }

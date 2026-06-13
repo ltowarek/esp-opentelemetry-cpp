@@ -4,7 +4,7 @@ ESP-IDF component integrating OpenTelemetry C++ SDK with ESP32 firmware
 
 ## Scope
 
-This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK is upstream, unmodified. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
+This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK submodule tracks an upstream release tag and contains no local modifications. Where hardware constraints require deviations from upstream behaviour, the `src/workarounds/` subtree provides replacement translation units wired in through CMake `set_property(SOURCES)` overrides rather than edits to the submodule. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
 
 ## Usage
 
@@ -28,7 +28,7 @@ auto scope  = opentelemetry::trace::Scope(span);
 span->End();
 ```
 
-Enable tracing via `idf.py menuconfig` → **Tracing** or set in `sdkconfig.defaults`:
+Enable tracing via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfig.defaults`:
 
 ```
 CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
@@ -42,9 +42,10 @@ When `CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED` is off, the component still comp
 
 | Example | Description | Hardware needed |
 |---------|-------------|-----------------|
-| [`examples/ostream/`](examples/ostream/) | `OStreamSpanExporter` + `SimpleSpanProcessor`; prints spans to the serial console. | None (QEMU) |
-| [`examples/batch/`](examples/batch/) | `BatchSpanProcessor` + `OtlpHttpExporter`; Wi-Fi setup, PSRAM thread stack, exports spans to an OTLP collector. | Wi-Fi |
-| [`examples/propagation/`](examples/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
+| [`examples/tracing/ostream/`](examples/tracing/ostream/) | `OStreamSpanExporter` + `SimpleSpanProcessor`; prints spans to the serial console. | None (QEMU) |
+| [`examples/tracing/batch/`](examples/tracing/batch/) | `BatchSpanProcessor` + `OtlpHttpExporter`; Wi-Fi setup, PSRAM thread stack, exports spans to an OTLP collector. | Wi-Fi |
+| [`examples/tracing/propagation/`](examples/tracing/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
+| [`examples/metrics/ostream/`](examples/metrics/ostream/) | `OStreamMetricExporter` + `PeriodicExportingMetricReader`; counter and observable gauge printed to the serial console. | None (QEMU) |
 
 ## Workarounds
 
@@ -56,6 +57,7 @@ The `src/workarounds/` subtree contains code that exists purely to paper over up
 | `src/workarounds/absl_varint_bool.h` | `int32_t` is `long` not `int` on Xtensa; `bool`/`int`/`pid_t` do not match any `EncodeVarint` overload — ambiguous call on GCC 13.2 | Abseil |
 | `src/workarounds/sys/mman.h` | `sys/mman.h` absent from newlib; Abseil `LowLevelAlloc` calls `mmap` to grow its arena | Abseil |
 | `src/workarounds/time.h` | `struct tm` in newlib lacks `tm_gmtoff`; Abseil cctz includes it unconditionally | Abseil cctz |
+| `src/workarounds/esp_heap_align.cpp` | ESP-IDF heap uses `sizeof(void*)=4` as its alignment granularity; `alignof(std::max_align_t)==8` on Xtensa; `operator new` is therefore non-conforming. `google::protobuf::Arena` / `TaggedAllocationPolicyPtr` stores flags in the low 3 bits of a pointer (`kPtrMask=~7`), requiring 8-byte alignment. A 4-byte-aligned block causes `get()` to read 4 bytes before the struct, treating `max_block_size` (`0x00010000`) as a function pointer → `InstrFetchProhibited` at `PC=0x00010000`. Replaces the six standard replaceable allocation operators with `heap_caps_aligned_alloc`-backed versions. | ESP-IDF heap |
 
 ## ESP-specific integrations
 
@@ -63,7 +65,7 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 
 | File | What it provides |
 |------|-----------------|
-| `src/integration/esp_http_client_transport.cpp` | `HttpClientFactory` backed by `esp_http_client`; libcurl is excluded via `WITH_HTTP_CLIENT_CURL=OFF` |
+| `src/integration/esp_http_client_transport.cpp` | `HttpClientFactory` backed by `esp_http_client`, replacing libcurl for the OTLP/HTTP exporter |
 | `src/integration/esp_opentelemetry.cpp` | `esp_opentelemetry_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor, resource, and W3C propagator via Kconfig |
 
 ## Tested OTel C++ SDK features
@@ -72,13 +74,17 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 
 | Feature | Status | Example |
 |---------|--------|---------|
-| `OStreamSpanExporter` | Tested (QEMU) | [`examples/ostream/`](examples/ostream/) |
-| `SimpleSpanProcessor` | Tested (QEMU) | [`examples/ostream/`](examples/ostream/) |
-| `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/batch/`](examples/batch/) |
-| `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/batch/`](examples/batch/) |
-| W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/propagation/`](examples/propagation/) |
+| `OStreamSpanExporter` | Tested (QEMU) | [`examples/tracing/ostream/`](examples/tracing/ostream/) |
+| `SimpleSpanProcessor` | Tested (QEMU) | [`examples/tracing/ostream/`](examples/tracing/ostream/) |
+| `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/tracing/batch/`](examples/tracing/batch/) |
+| `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/tracing/batch/`](examples/tracing/batch/) |
+| W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/tracing/propagation/`](examples/tracing/propagation/) |
 | Span attributes (`SetAttribute`) | Tested | covered by all examples |
 | Span events (`AddEvent`) | Untested | — |
 | `OtlpHttpExporter` (protobuf) | Untested | — |
-| Metrics API | Not integrated | — |
+| `OStreamMetricExporter` | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| `PeriodicExportingMetricReader` | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| `OtlpHttpMetricExporter` | Linked | — |
+| Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
+| Observable gauge (`AddCallback`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
 | Logs API | Not integrated | — |

@@ -47,13 +47,16 @@ jobs:
     strategy:
       matrix:
         include:
-          - project: batch example
-            path: examples/batch
-          - project: ostream example
-            path: examples/ostream
+          - project: tracing/batch example
+            path: examples/tracing/batch
+          - project: tracing/ostream example
+            path: examples/tracing/ostream
             qemu: true
-          - project: propagation example
-            path: examples/propagation
+          - project: tracing/propagation example
+            path: examples/tracing/propagation
+          - project: metrics/ostream example
+            path: examples/metrics/ostream
+            qemu: true
 
     container:
       image: ghcr.io/ltowarek/esp-opentelemetry-cpp-devcontainer
@@ -81,21 +84,20 @@ jobs:
           ccache-${{ runner.os }}-idf-${{ matrix.path }}-
           ccache-${{ runner.os }}-idf-
 
-    - name: Activate esp-idf
-      run: |
-        source $IDF_PATH/export.sh
-        echo "$PATH" >> $GITHUB_PATH
-
     - name: Build
       env:
         CCACHE_DIR: ${{ github.workspace }}/.ccache
-      run: idf.py build
+      run: |
+        source $IDF_PATH/export.sh
+        idf.py build
       working-directory: ${{ matrix.path }}
 
     - name: Run in QEMU
       if: ${{ matrix.qemu }}
       working-directory: ${{ matrix.path }}
-      run: bash test_qemu.sh
+      run: |
+        source $IDF_PATH/export.sh
+        bash test_qemu.sh
 
   ci-status:
     needs: [build-docker, build]

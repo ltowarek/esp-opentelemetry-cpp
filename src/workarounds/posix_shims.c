@@ -45,27 +45,28 @@ static void esp_init_startup_threadptr(void)
 
 static void esp_init_startup_threadptr(void)
 {
-    extern int _thread_local_start, _thread_local_end;
-    extern int _flash_rodata_start, _flash_rodata_align;
+    // ESP-IDF v6 renamed the TLS linker symbols and changed the layout.
+    // Match uxInitialiseStackTLS() in portable/xtensa/port.c exactly.
+    extern char _thread_local_data_start, _thread_local_data_end;
+    extern char _thread_local_bss_start,  _thread_local_bss_end;
+    extern int  _tls_section_alignment;
 
-    uint32_t tls_len = (uint32_t)&_thread_local_end - (uint32_t)&_thread_local_start;
-    if (tls_len == 0 || tls_len > sizeof(s_startup_tls_area)) {
-        return;  // nothing to set up
+    uint32_t data_size = (uint32_t)&_thread_local_data_end
+                       - (uint32_t)&_thread_local_data_start;
+    uint32_t bss_size  = (uint32_t)&_thread_local_bss_end
+                       - (uint32_t)&_thread_local_bss_start;
+    // Round total TLS area up to 16 bytes (ALIGNUP(16, data+bss))
+    uint32_t tls_area_size = (data_size + bss_size + 15u) & ~15u;
+    if (tls_area_size == 0 || tls_area_size > sizeof(s_startup_tls_area)) {
+        return;
     }
-    memcpy(s_startup_tls_area, &_thread_local_start, tls_len);
+    memcpy(s_startup_tls_area, &_thread_local_data_start, data_size);
+    memset(s_startup_tls_area + data_size, 0, bss_size);
 
-    // Mirror the THREADPTR calculation from uxInitialiseStackTLS in
-    // components/freertos/FreeRTOS-Kernel/portable/xtensa/port.c:
-    //   threadptr = tls_area_start
-    //               - (_thread_local_start - _flash_rodata_start)
-    //               - align_up(TCB_SIZE=8, tls_section_align)
-    uint32_t tls_section_align = (uint32_t)&_flash_rodata_align;
-    uint32_t base = (tls_section_align + 7) & ~(tls_section_align - 1);  // align_up(8, align)
-    if (base < 8) base = 8;
-    uint32_t threadptr = (uint32_t)s_startup_tls_area
-                         - ((uint32_t)&_thread_local_start - (uint32_t)&_flash_rodata_start)
-                         - base;
-
+    // THREADPTR = tls_area_start - ALIGNUP(tls_section_align, TCB_SIZE=8)
+    uint32_t tls_align = (uint32_t)&_tls_section_alignment;
+    uint32_t base = (8u + tls_align - 1u) & ~(tls_align - 1u);
+    uint32_t threadptr = (uint32_t)s_startup_tls_area - base;
     __asm__ volatile ("wur.THREADPTR %0" :: "a"(threadptr));
 }
 
