@@ -1,22 +1,27 @@
-// Reproduction of issue #32 using protobuf's Arena, the exact code path
-// that crashes in OtlpHttpExporter::Export().
+// Regression test for issue #32 using protobuf's Arena, the exact code path
+// that crashed in OtlpHttpExporter::Export().
 //
 // OtlpHttpExporter creates a google::protobuf::Arena with non-default
 // ArenaOptions on every Export() call.  A non-default max_block_size causes
 // InitializeWithPolicy to embed an AllocationPolicy pointer inside the first
-// arena block.  If operator new returned a 4-byte-aligned block (as ESP-IDF's
-// heap can), TaggedAllocationPolicyPtr::get() computes (ptr & ~7) = ptr - 4,
-// reading max_block_size (0x00010000) as the block_alloc function pointer.
-// The next arena block allocation calls block_alloc(size) → jumps to
+// arena block.  ESP-IDF's heap hands out 4-byte-aligned blocks, so that
+// embedded AllocationPolicy* can be 4-byte aligned.  Before the protobuf fix,
+// TaggedAllocationPolicyPtr reserved 3 tag bits (kPtrMask=~7) and get() then
+// computed (ptr & ~7) = ptr - 4, reading max_block_size (0x00010000) as the
+// block_alloc function pointer; the next arena block allocation jumped to
 // 0x00010000 → InstrFetchProhibited.
 //
-// Expected output (workaround active / conforming allocator):
+// The fix (ltowarek/protobuf@alignment, pending upstream to protobuf) reserves
+// only the single tag bit actually used, so a 4-byte-aligned pointer round-trips
+// intact and no allocator workaround is needed.  This test now verifies the fix:
+// even though operator new is 4-byte aligned, the Arena survives.
+//
+// Expected output WITH the fix (current):
 //   alignof(max_align_t) = 8
-//   operator new low3=0  ...
+//   operator new low3=4 for some blocks   (ESP-IDF heap is 4-byte aligned)
 //   PASS: Arena survived second-block allocation
 //
-// Expected output (bug present, no workaround):
-//   alignof(max_align_t) = 8
+// Expected output WITHOUT the fix (regression):
 //   operator new low3=4  ...
 //   Guru Meditation Error: Core  0 panic'ed (InstrFetchProhibited)
 //   PC: 0x00010000
@@ -76,7 +81,8 @@ extern "C" void app_main()
 
     // Allocate 20 × 64 = 1280 bytes, exceeding the ~1000 usable bytes in
     // the first block.  The second block allocation calls block_alloc().
-    // Without the workaround: block_alloc = 0x00010000 → crash.
+    // Before the protobuf fix, a 4-byte-aligned policy made block_alloc read
+    // 0x00010000 → crash; with the fix the Arena survives.
     for (int i = 0; i < 20; ++i) {
         (void)google::protobuf::Arena::CreateArray<char>(&arena, 64);
     }
