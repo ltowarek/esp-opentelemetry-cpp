@@ -6,9 +6,7 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -203,7 +201,7 @@ private:
     if (uri.empty()) return url_;
     if (uri.rfind("http://", 0) == 0 || uri.rfind("https://", 0) == 0) return uri;
     // uri is a relative path; strip any existing path from url_ to get the base
-    // (mirrors curl transport: host_ = scheme://host:port/)
+    // uri is relative; strip path from url_ to get scheme://host:port
     auto scheme_end = url_.find("://");
     if (scheme_end == std::string::npos) return url_;
     auto path_start = url_.find('/', scheme_end + 3);
@@ -235,31 +233,14 @@ class EspHttpClient : public http_client::HttpClient {
 public:
   std::shared_ptr<http_client::Session> CreateSession(
       string_view url) noexcept override {
-    auto session =
-        std::make_shared<EspSession>(std::string(url.data(), url.size()));
-    std::lock_guard<std::mutex> lock(mu_);
-    sessions_.insert(session);
-    return session;
+    return std::make_shared<EspSession>(std::string(url.data(), url.size()));
   }
 
-  bool CancelAllSessions() noexcept override {
-    std::lock_guard<std::mutex> lock(mu_);
-    for (auto& s : sessions_) s->CancelSession();
-    return true;
-  }
+  bool CancelAllSessions() noexcept override { return true; }
 
-  bool FinishAllSessions() noexcept override {
-    std::lock_guard<std::mutex> lock(mu_);
-    for (auto& s : sessions_) s->FinishSession();
-    sessions_.clear();
-    return true;
-  }
+  bool FinishAllSessions() noexcept override { return true; }
 
   void SetMaxSessionsPerConnection(std::size_t) noexcept override {}
-
-private:
-  std::mutex mu_;
-  std::unordered_set<std::shared_ptr<EspSession>> sessions_;
 };
 
 }  // namespace
@@ -269,39 +250,3 @@ std::shared_ptr<http_client::HttpClient> MakeEspHttpClient() {
 }
 
 }  // namespace esp_opentelemetry
-
-// --- Replace the default opentelemetry-cpp HTTP transport factory -----------
-//
-// opentelemetry_http_client_curl ships three free functions that the
-// OTLP exporter calls via HttpClientFactory::Create / CreateSync. The
-// default implementation uses libcurl. We build the same target from
-// this source file instead (see CMakeLists.txt), redirecting the factory
-// to our esp_http_client-backed client. This avoids cross-compiling libcurl
-// for Xtensa while keeping the opentelemetry-cpp link graph intact.
-
-#include "opentelemetry/ext/http/client/http_client_factory.h"
-#include "opentelemetry/sdk/common/thread_instrumentation.h"
-
-namespace opentelemetry {
-namespace ext {
-namespace http {
-namespace client {
-
-std::shared_ptr<HttpClient> HttpClientFactory::Create() {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
-
-std::shared_ptr<HttpClient> HttpClientFactory::Create(
-    const std::shared_ptr<sdk::common::ThreadInstrumentation>& /*unused*/) {
-  return esp_opentelemetry::MakeEspHttpClient();
-}
-
-std::shared_ptr<HttpClientSync> HttpClientFactory::CreateSync() {
-  // HttpClientSync is unused by the OTLP exporter; return nullptr.
-  return nullptr;
-}
-
-}  // namespace client
-}  // namespace http
-}  // namespace ext
-}  // namespace opentelemetry

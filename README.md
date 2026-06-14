@@ -4,7 +4,7 @@ ESP-IDF component integrating OpenTelemetry C++ SDK with ESP32 firmware
 
 ## Scope
 
-This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK submodule tracks an upstream release tag and contains no local modifications. Where hardware constraints require deviations from upstream behaviour, the `src/workarounds/` subtree provides replacement translation units wired in through CMake `set_property(SOURCES)` overrides rather than edits to the submodule. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
+This project is an **integration** of the upstream [opentelemetry-cpp](https://github.com/open-telemetry/opentelemetry-cpp) SDK with the [ESP-IDF](https://github.com/espressif/esp-idf) build system. It is not a fork and not a port — the vendored SDK submodule tracks a specific upstream commit and contains no local modifications. Where hardware constraints require deviations from upstream behaviour, the `src/workarounds/` subtree provides replacement translation units wired in through CMake `set_property(SOURCES)` overrides rather than edits to the submodule. The integration wires the SDK into the ESP-IDF build system and exposes a C++ API aligned with ESP-IDF naming conventions.
 
 ## Usage
 
@@ -66,7 +66,7 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 
 | File | What it provides |
 |------|-----------------|
-| `src/integration/esp_http_client_transport.cpp` | `HttpClientFactory` backed by `esp_http_client`, replacing libcurl for the OTLP/HTTP exporter |
+| `src/integration/esp_http_client_transport.cpp` | `HttpClient` implementation backed by `esp_http_client`, passed directly to `OtlpHttpExporter`'s HTTP-client constructor overload ([open-telemetry/opentelemetry-cpp#4071](https://github.com/open-telemetry/opentelemetry-cpp/pull/4071)), replacing libcurl for the OTLP/HTTP exporter |
 | `src/integration/esp_opentelemetry.cpp` | `esp_opentelemetry_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor, resource, and W3C propagator via Kconfig |
 
 ## Tested OTel C++ SDK features
