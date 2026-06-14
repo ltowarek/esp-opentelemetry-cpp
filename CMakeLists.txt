@@ -123,6 +123,14 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         "${CMAKE_CURRENT_LIST_DIR}/third_party/protobuf/src"
         "${CMAKE_CURRENT_LIST_DIR}/third_party/abseil-cpp")
 
+    # The component's own C++ TUs pull opentelemetry-cpp + protobuf headers that
+    # transitively include absl/base/internal/thread_identity.h, whose
+    # unconditional lock-free static_assert fails on some ESP toolchain configs.
+    # Prepend the dedicated absl_shadow include dir so our thread_identity.h
+    # shadow wins over Abseil's own -I (see cmake/protobuf_setup.cmake).
+    target_include_directories(${COMPONENT_LIB} BEFORE PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/workarounds/absl_shadow")
+
     if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
         target_link_libraries(${COMPONENT_LIB} PUBLIC
             opentelemetry_trace

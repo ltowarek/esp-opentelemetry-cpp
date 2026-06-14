@@ -197,6 +197,19 @@ function(_esp_opentelemetry_apply_int_override dir)
                 # warning-as-error for all vendored external targets while
                 # keeping warnings visible in the build log.
                 -Wno-error)
+            # Abseil's thread_identity.h has an unconditional
+            # static_assert(std::atomic<WaitState>::is_always_lock_free) that
+            # fails on ESP toolchain configs where 1-byte atomics are not
+            # reported always-lock-free. Shadow it with our copy under
+            # src/workarounds/absl_shadow/, which neutralizes only that assert
+            # via #include_next. The shadow dir must be a *dedicated* directory
+            # prepended to the target's -I list: the BEFORE SYSTEM shims entry
+            # is -isystem (searched after every -I, so it cannot win over
+            # Abseil's own -I), and re-adding the shims dir itself is
+            # deduplicated away. A distinct dir prepended with BEFORE lands as
+            # an -I ahead of Abseil's -I and wins for the quoted include.
+            target_include_directories(${_t} BEFORE PRIVATE
+                "${ESP_OPENTELEMETRY_SHIMS_DIR}/absl_shadow")
         endif()
     endforeach()
     get_property(_subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
