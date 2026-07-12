@@ -1,0 +1,17 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Profiling only — no tracing SDK, no Wi-Fi. Profiles are dumped to the serial
+# console as OTLP/JSON (PROFILE_JSON_BEGIN/END markers) so the whole sampler ->
+# span slot -> exporter path is observable (and CI-testable in QEMU) without
+# any backend. The per-task span slot needs a second FreeRTOS TLS pointer.
+CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_PROFILING_EXPORT_INTERVAL_MS=1000
+CONFIG_ESP_OPENTELEMETRY_PROFILES_DEBUG_JSON=y
+CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="profiling-serial-example"
+CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2

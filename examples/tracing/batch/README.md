@@ -29,7 +29,7 @@ Set the following in `sdkconfig.defaults` or via `idf.py menuconfig`:
 |-----|-------------|
 | `CONFIG_WIFI_SSID` | Wi-Fi network name |
 | `CONFIG_WIFI_PASSWORD` | Wi-Fi password |
-| `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint, e.g. `http://192.168.1.10:4318` |
+| `CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL` | OTLP collector endpoint, e.g. `http://192.168.1.10:4318` |
 
 ## Build
 

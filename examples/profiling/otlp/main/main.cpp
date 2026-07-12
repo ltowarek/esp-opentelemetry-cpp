@@ -10,9 +10,8 @@
 #include "sdkconfig.h"
 #include "esp_opentelemetry.hpp"
 #include "opentelemetry/trace/scope.h"
-#include "opentelemetry/trace/span_startoptions.h"
 
-static const char *TAG = "batch-example";
+static const char *TAG = "profiling-otlp";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -73,6 +72,18 @@ static bool wifi_connect()
     return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
+// A recognizable hot function: with the sampler running, this dominates the
+// flame graph. noinline so the symbolized frame carries this exact name.
+static uint64_t g_sink;
+static void __attribute__((noinline)) burn_cpu()
+{
+    uint64_t acc = 0;
+    for (int i = 0; i < 200000; i = i + 1) {
+        acc += static_cast<uint64_t>(i) * i;
+    }
+    g_sink = g_sink + acc;
+}
+
 extern "C" void app_main()
 {
     ESP_LOGI(TAG, "Connecting to Wi-Fi SSID: %s ...", CONFIG_WIFI_SSID);
@@ -82,54 +93,28 @@ extern "C" void app_main()
     }
     ESP_LOGI(TAG, "Wi-Fi connected");
 
-    // The component routes the BatchSpanProcessor's export thread to a 64 KB
-    // PSRAM stack internally.
     esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+    esp_opentelemetry_profiling_setup();
+
+    ESP_LOGI(TAG, "Profiles OTLP base URL: %s",
+             CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL);
 
     auto tracer = esp_opentelemetry_tracer();
 
-    ESP_LOGI(TAG, "OTLP endpoint : %s",
-             CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL);
-    ESP_LOGI(TAG, "Batch flush interval: %d ms",
-             CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS);
-
-    // Root span — all child spans share this trace ID.
-    auto root = tracer->StartSpan(
-        "batch.demo",
-        {{"example.name", "batch"},
-         {"span.count", static_cast<int64_t>(5)}});
-    auto root_scope = opentelemetry::trace::Scope(root);
-
-    // Create several child spans to fill the batch queue and demonstrate
-    // that the BatchSpanProcessor groups them into a single HTTP POST.
-    ESP_LOGI(TAG, "Queueing child spans...");
-    for (int i = 0; i < 5; i++) {
-        char name[32];
-        snprintf(name, sizeof(name), "batch.item.%d", i);
-
-        opentelemetry::trace::StartSpanOptions opts;
-        opts.parent = root->GetContext();
-
-        auto span = tracer->StartSpan(
-            name,
-            {{"batch.index", static_cast<int64_t>(i)},
-             {"batch.total", static_cast<int64_t>(5)}},
-            opts);
-        span->End();
-
-        ESP_LOGI(TAG, "  queued: %s", name);
-        vTaskDelay(pdMS_TO_TICKS(200));
+    // Forever: one span per iteration wrapping the hot loop, so profile
+    // samples carry the span link (span profiles), followed by idle time so
+    // the flame graph shows both burn_cpu() and the idle task.
+    for (uint32_t i = 0;; ++i) {
+        {
+            auto span = tracer->StartSpan("example.burn");
+            auto scope = opentelemetry::trace::Scope(span);
+            burn_cpu();
+            span->End();
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (i % 50 == 0) {
+            ESP_LOGI(TAG, "samples captured so far: %lu",
+                     static_cast<unsigned long>(esp_opentelemetry_profiling_samples()));
+        }
     }
-
-    root->End();
-
-    // Sleep past the flush interval so the HTTP POST completes
-    // before the log message below confirms success.
-    const int flush_wait_ms = CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS + 5000;
-    ESP_LOGI(TAG, "All spans queued — waiting %d ms for BatchSpanProcessor to flush...",
-             flush_wait_ms);
-    vTaskDelay(pdMS_TO_TICKS(flush_wait_ms));
-
-    ESP_LOGI(TAG, "Done. Check your OTLP collector for service '%s'.",
-             CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
 }

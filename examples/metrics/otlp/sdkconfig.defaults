@@ -1,0 +1,26 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MODE_OCT=y
+
+# The OTLP/HTTP exporter pulls in protobuf + Abseil + opentelemetry-cpp,
+# pushing the binary past the stock 1.5 MB factory partition. Grow flash to
+# 4 MB and switch to a custom layout with a ~3.25 MB factory slot.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=32768
+
+# Metrics only — tracing stays off to show the metrics signal standing alone.
+CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL=""
+CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="metrics-otlp-example"
+
+CONFIG_WIFI_SSID=""
+CONFIG_WIFI_PASSWORD=""

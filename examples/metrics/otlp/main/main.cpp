@@ -2,6 +2,7 @@
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -9,10 +10,9 @@
 #include <cstring>
 #include "sdkconfig.h"
 #include "esp_opentelemetry.hpp"
-#include "opentelemetry/trace/scope.h"
-#include "opentelemetry/trace/span_startoptions.h"
+#include "opentelemetry/metrics/provider.h"
 
-static const char *TAG = "batch-example";
+static const char *TAG = "metrics-otlp-example";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
@@ -73,6 +73,11 @@ static bool wifi_connect()
     return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
+static void observe_uptime(opentelemetry::metrics::ObserverResult obs, void *)
+{
+    observe_int64(obs, esp_timer_get_time() / 1000000);
+}
+
 extern "C" void app_main()
 {
     ESP_LOGI(TAG, "Connecting to Wi-Fi SSID: %s ...", CONFIG_WIFI_SSID);
@@ -82,54 +87,26 @@ extern "C" void app_main()
     }
     ESP_LOGI(TAG, "Wi-Fi connected");
 
-    // The component routes the BatchSpanProcessor's export thread to a 64 KB
-    // PSRAM stack internally.
-    esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+    esp_opentelemetry_metrics_setup();
 
-    auto tracer = esp_opentelemetry_tracer();
+    ESP_LOGI(TAG, "Metrics OTLP base URL: %s",
+             CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL);
 
-    ESP_LOGI(TAG, "OTLP endpoint : %s",
-             CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL);
-    ESP_LOGI(TAG, "Batch flush interval: %d ms",
-             CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS);
+    auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter(
+        CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME, "1.0.0");
 
-    // Root span — all child spans share this trace ID.
-    auto root = tracer->StartSpan(
-        "batch.demo",
-        {{"example.name", "batch"},
-         {"span.count", static_cast<int64_t>(5)}});
-    auto root_scope = opentelemetry::trace::Scope(root);
+    // Observable gauge: collected by the PeriodicExportingMetricReader every
+    // CONFIG_ESP_OPENTELEMETRY_METRICS_EXPORT_INTERVAL_MS and exported via
+    // OTLP/HTTP JSON.
+    auto uptime = meter->CreateInt64ObservableGauge(
+        "example.uptime", "Seconds since boot", "s");
+    uptime->AddCallback(observe_uptime, nullptr);
 
-    // Create several child spans to fill the batch queue and demonstrate
-    // that the BatchSpanProcessor groups them into a single HTTP POST.
-    ESP_LOGI(TAG, "Queueing child spans...");
-    for (int i = 0; i < 5; i++) {
-        char name[32];
-        snprintf(name, sizeof(name), "batch.item.%d", i);
+    // Counter incremented on the app side each second.
+    auto ticks = meter->CreateUInt64Counter("example.ticks", "Loop iterations");
 
-        opentelemetry::trace::StartSpanOptions opts;
-        opts.parent = root->GetContext();
-
-        auto span = tracer->StartSpan(
-            name,
-            {{"batch.index", static_cast<int64_t>(i)},
-             {"batch.total", static_cast<int64_t>(5)}},
-            opts);
-        span->End();
-
-        ESP_LOGI(TAG, "  queued: %s", name);
-        vTaskDelay(pdMS_TO_TICKS(200));
+    for (;;) {
+        ticks->Add(1);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
-
-    root->End();
-
-    // Sleep past the flush interval so the HTTP POST completes
-    // before the log message below confirms success.
-    const int flush_wait_ms = CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS + 5000;
-    ESP_LOGI(TAG, "All spans queued — waiting %d ms for BatchSpanProcessor to flush...",
-             flush_wait_ms);
-    vTaskDelay(pdMS_TO_TICKS(flush_wait_ms));
-
-    ESP_LOGI(TAG, "Done. Check your OTLP collector for service '%s'.",
-             CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
 }

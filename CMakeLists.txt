@@ -14,13 +14,27 @@
 # third_party/ and built as part of this component.
 
 set(ESP_OPENTELEMETRY_SRCS
-    src/integration/esp_opentelemetry.cpp
+    src/integration/esp_metrics.cpp
+    src/integration/esp_tracing.cpp
     src/workarounds/posix_shims.c
     src/workarounds/esp_heap_align.cpp
 )
 
 if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_http_client_transport.cpp)
+endif()
+
+# Profiling's sources reference gptimer/cJSON/the app descriptor unconditionally
+# (no internal #ifdef), so — like tracing/metrics above — they're only built
+# when the signal is enabled; esp_profiling_stub.cpp provides the no-op public
+# API otherwise so callers can call it unconditionally either way.
+if(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+    list(APPEND ESP_OPENTELEMETRY_SRCS
+        src/integration/esp_profiles_exporter.cpp
+        src/integration/esp_profiling.cpp
+        src/integration/esp_task_span_slot.cpp)
+else()
+    list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_profiling_stub.cpp)
 endif()
 
 # The opentelemetry-cpp api/ tree is header-only and compiles without the
@@ -31,7 +45,23 @@ endif()
 set(ESP_OPENTELEMETRY_CPP_API_INCLUDE
     "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/api/include")
 
-set(ESP_OPENTELEMETRY_REQUIRES esp_http_client pthread)
+set(ESP_OPENTELEMETRY_REQUIRES
+    esp_http_client
+    pthread
+    esp_system
+)
+
+# REQUIRES cannot be conditioned on CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
+# the way SRCS above is: ESP-IDF expands component requirements before
+# sdkconfig is loaded, so a Kconfig-conditional REQUIRES silently misses these
+# regardless of the config value — they stay unconditional (harmless extra
+# link-time dependency when profiling is disabled).
+list(APPEND ESP_OPENTELEMETRY_REQUIRES
+    cjson
+    esp_app_format
+    esp_hw_support
+    esp_driver_gptimer
+    esp_timer)
 
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}

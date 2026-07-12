@@ -7,14 +7,115 @@ menu "OpenTelemetry"
         bool "Enable OpenTelemetry tracing"
         default n
 
-    config ESP_OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT
-        string "OTLP HTTP endpoint (e.g. http://192.168.1.10:4318)"
+    config ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL
+        string "Tracing OTLP base URL (e.g. http://192.168.1.10:4318)"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default ""
         help
-            Reachable from the device over Wi-Fi. The ESP32 cannot resolve
-            Docker DNS names - point this at the host LAN IP running the
-            observability stack.
+            Base URL for OTLP/HTTP trace export. The path "/v1/traces" is
+            appended automatically. Must be reachable from the device over
+            Wi-Fi (a plain host:port URL - the ESP32 has no mDNS/service
+            discovery).
+
+    config ESP_OPENTELEMETRY_PROFILING_ENABLED
+        bool "Enable statistical CPU profiler"
+        default n
+        help
+            Enables a per-core timer-ISR sampling profiler that captures the
+            interrupted call stack via esp_backtrace, aggregates identical
+            stacks into counts (pprof semantics), and exports them as
+            OpenTelemetry profiles. Intended for on-target debugging of where
+            CPU time goes; leave disabled in production. Adds a small
+            per-sample overhead and two timer interrupts.
+
+    config ESP_OPENTELEMETRY_PROFILING_SAMPLE_HZ
+        int "Sample rate per core (Hz)"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default 100
+        range 1 1000
+        help
+            Per-core sampling frequency. Keep at or below ~200 Hz/core:
+            Xtensa stack unwinding is not free, and higher rates perturb the
+            real-time workload being measured.
+
+    config ESP_OPENTELEMETRY_PROFILING_MAX_DEPTH
+        int "Maximum stack depth per sample"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default 16
+        range 4 64
+        help
+            Number of call frames captured per sample. Deeper stacks cost more
+            ISR time and RAM (each ring slot is sized for this depth).
+
+    config ESP_OPENTELEMETRY_PROFILING_RING_CAPACITY
+        int "Per-core sample ring capacity"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default 128
+        range 16 1024
+        help
+            Number of raw samples buffered per core between export-task drains.
+            A full ring drops new samples. Internal RAM use per core is roughly
+            capacity * (32 + 4 * max-depth) bytes.
+
+    config ESP_OPENTELEMETRY_PROFILING_EXPORT_INTERVAL_MS
+        int "Profiles export interval (ms)"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default 5000
+        help
+            How often the aggregation/export task folds identical stacks into
+            counts and exports a profile. (The rings are drained far more often
+            so they cannot overflow.)
+
+    config ESP_OPENTELEMETRY_PROFILING_MAX_UNIQUE_STACKS
+        int "Max unique stacks per export window"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default 256
+        range 16 4096
+        help
+            Bound on distinct (task, span, stack) combinations aggregated per
+            export window; further unique stacks in the window are dropped.
+            The aggregation tables cost roughly 128 bytes per entry, allocated
+            from PSRAM when available.
+
+    config ESP_OPENTELEMETRY_PROFILING_DEBUG_LOG
+        bool "Log aggregated stacks each export window"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default n
+        help
+            Logs every aggregated stack (raw PCs) at each export. Useful for
+            validating the sampler on hardware with xtensa-esp-elf-addr2line;
+            noisy, so leave disabled in normal use.
+
+    config ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL
+        string "Profiles OTLP/HTTP endpoint (the profiling-symbolizer)"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default ""
+        help
+            Base URL of the profiling-symbolizer; "/v1development/profiles" is
+            appended automatically. esp_opentelemetry::export_profiles() POSTs
+            unsymbolized OTLP/JSON profiles here and the symbolizer resolves
+            them against the firmware ELF before forwarding to the collector.
+            Distinct from the tracing endpoint (profiles go via the symbolizer,
+            not directly to the collector). Leave empty to disable export.
+
+    config ESP_OPENTELEMETRY_PROFILES_SPAN_ATTRIBUTE
+        string "Span attribute linking spans to profiles"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default "pyroscope.profile.id"
+        help
+            Attribute key stamped (with the span id as hex value) on every
+            activated span so a trace backend can link the span to its profile
+            samples. The default follows the Grafana span-profiles convention
+            (Tempo's "Profiles for this span" flame graph); other backends may
+            use a different key. Set empty to disable stamping.
+
+    config ESP_OPENTELEMETRY_PROFILES_DEBUG_JSON
+        bool "Log the profiles JSON document on each export"
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        default n
+        help
+            Prints each exported ProfilesData JSON between PROFILE_JSON_BEGIN /
+            PROFILE_JSON_END markers for capture/replay validation. Noisy.
 
     config ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE
         int "Max queued spans before drop"
@@ -29,4 +130,25 @@ menu "OpenTelemetry"
     config ESP_OPENTELEMETRY_METRICS_ENABLED
         bool "Enable OpenTelemetry metrics"
         default n
+        help
+            Compiles the metrics SDK and enables
+            esp_opentelemetry_metrics_setup(), which installs a
+            PeriodicExportingMetricReader exporting via OTLP/HTTP.
+
+    config ESP_OPENTELEMETRY_METRICS_EXPORT_INTERVAL_MS
+        int "Metrics export interval (ms)"
+        depends on ESP_OPENTELEMETRY_METRICS_ENABLED
+        default 500
+        help
+            How often the PeriodicExportingMetricReader collects and exports
+            metrics.
+
+    config ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL
+        string "Metrics OTLP base URL"
+        depends on ESP_OPENTELEMETRY_METRICS_ENABLED
+        default ""
+        help
+            Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is
+            appended automatically. Required when metrics are enabled; when
+            empty, metrics export stays disabled.
 endmenu
