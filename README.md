@@ -19,24 +19,34 @@ idf_component_register(SRCS "main.cpp"
 #include "esp_opentelemetry.hpp"
 
 // Once, after Wi-Fi is up:
-esp_opentelemetry_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);  // traces
+esp_opentelemetry_metrics_setup();                                       // metrics provider
+esp_opentelemetry_profiling_setup();                                     // statistical CPU profiler + span->profile link
 
 // Create spans:
 auto tracer = esp_opentelemetry_tracer();
 auto span   = tracer->StartSpan("my.operation");
 auto scope  = opentelemetry::trace::Scope(span);
 span->End();
+
+// Register metric instruments against the global meter provider:
+auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter("my-device");
 ```
 
-Enable tracing via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfig.defaults`:
+Enable signals via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfig.defaults`:
 
 ```
-CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
-CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT="http://192.168.1.10:4318"
 CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="my-device"
+CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"   # the symbolizer
+CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2     # per-task span slot for span profiles
 ```
 
-When `CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED` is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider with zero runtime overhead.
+When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead.
 
 ## Examples
 
@@ -46,6 +56,9 @@ When `CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED` is off, the component still comp
 | [`examples/tracing/batch/`](examples/tracing/batch/) | `BatchSpanProcessor` + `OtlpHttpExporter`; Wi-Fi setup, PSRAM thread stack, exports spans to an OTLP collector. | Wi-Fi |
 | [`examples/tracing/propagation/`](examples/tracing/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
 | [`examples/metrics/ostream/`](examples/metrics/ostream/) | `OStreamMetricExporter` + `PeriodicExportingMetricReader`; counter and observable gauge printed to the serial console. | None (QEMU) |
+| [`examples/metrics/otlp/`](examples/metrics/otlp/) | `esp_opentelemetry_metrics_setup()`: `PeriodicExportingMetricReader` + `OtlpHttpMetricExporter` (JSON); observable gauge and counter exported to an OTLP receiver. | Wi-Fi |
+| [`examples/profiling/serial/`](examples/profiling/serial/) | Statistical CPU profiler standing alone: self-checked span slot + sampler, OTLP/JSON profiles dumped to the serial console. | None (QEMU) |
+| [`examples/profiling/otlp/`](examples/profiling/otlp/) | Full profiles pipeline: sampler + span profiles exported through the [`tools/symbolizer/`](tools/symbolizer/) into a Grafana-compatible backend. | Wi-Fi |
 
 ## Workarounds
 
@@ -67,7 +80,12 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 | File | What it provides |
 |------|-----------------|
 | `src/integration/esp_http_client_transport.cpp` | `HttpClient` implementation backed by `esp_http_client`, passed directly to `OtlpHttpExporter`'s HTTP-client constructor overload ([open-telemetry/opentelemetry-cpp#4071](https://github.com/open-telemetry/opentelemetry-cpp/pull/4071)), replacing libcurl for the OTLP/HTTP exporter |
-| `src/integration/esp_opentelemetry.cpp` | `esp_opentelemetry_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor, resource, and W3C propagator via Kconfig |
+| `src/integration/esp_tracing.cpp` | `esp_opentelemetry_tracing_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor (64 KB PSRAM export-thread stack), resource, and W3C propagator via Kconfig |
+| `src/integration/esp_metrics.cpp` | `esp_opentelemetry_metrics_setup()` — `PeriodicExportingMetricReader` + OTLP/HTTP metric exporter; `observe_double/observe_int64` helpers over the `ObserverResult` variant API |
+| `src/integration/esp_profiling.cpp` | `esp_opentelemetry_profiling_setup()` — per-core gptimer-ISR statistical sampler (`esp_backtrace`), lock-free rings, stack aggregation |
+| `src/integration/esp_profiles_exporter.cpp` | `esp_opentelemetry::export_profiles()` — OTLP profiles (`v1development`) built with cJSON, POSTed via `esp_http_client`; opentelemetry-cpp has no profiles SDK |
+| `src/integration/esp_task_span_slot.cpp` | Per-task active-span slot (FreeRTOS TLS + seqlock) mirroring `Scope` activation — the FreeRTOS analog of Go's goroutine labels; `esp_opentelemetry_active_span_id()` ISR-safe reader; span stamping with the configurable `CONFIG_ESP_OPENTELEMETRY_PROFILES_SPAN_ATTRIBUTE` |
+| `tools/symbolizer/` | Host-side OTLP profiles symbolizer: `xtensa-esp-elf-addr2line` resolution against build ELFs (auto-discovered by sha256 = profile `build_id`), ISR-frame trimming, forwards to an OTLP collector |
 
 ## Tested OTel C++ SDK features
 
@@ -81,6 +99,9 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/tracing/batch/`](examples/tracing/batch/) |
 | W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/tracing/propagation/`](examples/tracing/propagation/) |
 | Span attributes (`SetAttribute`) | Tested | covered by all examples |
+| `PeriodicExportingMetricReader` + `OtlpHttpMetricExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/metrics/otlp/`](examples/metrics/otlp/) |
+| OTLP profiles (`v1development`, JSON) + span profiles | Tested (hardware, ESP32-S3; Pyroscope 1.18 / collector 0.146) | [`examples/profiling/serial/`](examples/profiling/serial/) (QEMU), [`examples/profiling/otlp/`](examples/profiling/otlp/) |
+| Custom `RuntimeContextStorage` (per-task span slot) | Tested (hardware, ESP32-S3 + QEMU) | [`examples/profiling/serial/`](examples/profiling/serial/) |
 | Span events (`AddEvent`) | Untested | — |
 | `OtlpHttpExporter` (protobuf) | Untested | — |
 | `OStreamMetricExporter` | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |

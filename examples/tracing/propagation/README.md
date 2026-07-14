@@ -27,7 +27,7 @@ Set the following in `sdkconfig.defaults` or via `idf.py menuconfig`:
 | `CONFIG_WIFI_SSID` | Wi-Fi network name |
 | `CONFIG_WIFI_PASSWORD` | Wi-Fi password |
 | `CONFIG_TARGET_URL` | HTTP URL the example sends to |
-| `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (optional; used to export spans) |
+| `CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL` | OTLP collector endpoint (optional; used to export spans) |
 
 ## Build
 

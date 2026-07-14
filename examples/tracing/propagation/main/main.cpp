@@ -6,7 +6,6 @@
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_http_client.h"
-#include "esp_pthread.h"
 #include "nvs_flash.h"
 #include <cstring>
 #include <string>
@@ -114,19 +113,9 @@ extern "C" void app_main()
     }
     ESP_LOGI(TAG, "Wi-Fi connected");
 
-    // Route the BatchSpanProcessor background thread stack to PSRAM.
-    {
-        esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
-        cfg.stack_alloc_caps = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
-        esp_pthread_set_cfg(&cfg);
-    }
-
-    esp_opentelemetry_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
-
-    {
-        esp_pthread_cfg_t default_cfg = esp_pthread_get_default_config();
-        esp_pthread_set_cfg(&default_cfg);
-    }
+    // The component routes the BatchSpanProcessor's export thread to a 64 KB
+    // PSRAM stack internally.
+    esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
 
     auto tracer = esp_opentelemetry_tracer();
 

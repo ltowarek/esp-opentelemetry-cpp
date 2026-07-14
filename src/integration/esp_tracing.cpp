@@ -1,10 +1,11 @@
-#include "esp_opentelemetry.hpp"
+#include "esp_tracing.hpp"
 
 #include "sdkconfig.h"
 
 #include "opentelemetry/trace/provider.h"
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+#include "esp_export_thread.hpp"
 #include "esp_http_client_transport.hpp"
 #include "esp_log.h"
 
@@ -66,14 +67,14 @@ static std::unique_ptr<sdk_trace::SpanExporter> MakeExporter(
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
-void esp_opentelemetry_setup(const char* service_name) {
+void esp_opentelemetry_tracing_setup(const char* service_name) {
   bool expected = false;
   if (!g_initialised.compare_exchange_strong(expected, true)) {
     return;
   }
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_ENDPOINT;
+  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL;
   if (endpoint.empty()) {
     ESP_LOGW(TAG, "ESP_OPENTELEMETRY endpoint is empty; tracing disabled.");
     return;
@@ -86,8 +87,13 @@ void esp_opentelemetry_setup(const char* service_name) {
   batch_options.schedule_delay_millis =
       std::chrono::milliseconds(CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS);
 
-  auto processor = std::unique_ptr<sdk_trace::SpanProcessor>(
-      new sdk_trace::BatchSpanProcessor(std::move(exporter), batch_options));
+  std::unique_ptr<sdk_trace::SpanProcessor> processor;
+  {
+    // The BatchSpanProcessor constructor spawns its export pthread.
+    esp_opentelemetry::ScopedExportThreadConfig export_thread_cfg;
+    processor = std::unique_ptr<sdk_trace::SpanProcessor>(
+        new sdk_trace::BatchSpanProcessor(std::move(exporter), batch_options));
+  }
 
   auto resource = sdk_res::Resource::Create(
       {{"service.name", service_name ? service_name : kTracerName}});

@@ -60,3 +60,7 @@ sdkconfig
 sdkconfig.old
 dependencies.lock
 managed_components/
+
+# Python byte-caches (tools/symbolizer)
+__pycache__/
+*.pyc
