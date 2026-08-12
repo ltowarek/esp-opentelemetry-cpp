@@ -25,7 +25,6 @@ extern "C" {
 #include "opentelemetry/sdk/metrics/meter_provider_factory.h"
 #include "opentelemetry/sdk/metrics/provider.h"
 #include "opentelemetry/sdk/metrics/view/view_registry_factory.h"
-#include "opentelemetry/sdk/resource/resource.h"
 #include <chrono>
 #include <string>
 
@@ -53,7 +52,8 @@ void observe_int64(opentelemetry::metrics::ObserverResult& obs, int64_t value) {
 #endif
 }
 
-void esp_opentelemetry_metrics_setup() {
+void esp_opentelemetry_metrics_setup(
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #ifdef CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
   const char* metrics_base = CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL;
   if (*metrics_base == '\0') {
@@ -73,8 +73,7 @@ void esp_opentelemetry_metrics_setup() {
   reader_opts.export_timeout_millis =
       std::chrono::milliseconds(CONFIG_ESP_OPENTELEMETRY_METRICS_EXPORT_INTERVAL_MS / 2);
 
-  auto resource = opentelemetry::sdk::resource::Resource::Create(
-      {{"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}});
+  auto resource = opentelemetry::sdk::resource::Resource::Create(resource_attrs);
   auto context = opentelemetry::sdk::metrics::MeterContextFactory::Create(
       opentelemetry::sdk::metrics::ViewRegistryFactory::Create(), resource);
   {
@@ -88,5 +87,7 @@ void esp_opentelemetry_metrics_setup() {
   auto sdk_provider = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));
   std::shared_ptr<opentelemetry::metrics::MeterProvider> api_provider = std::move(sdk_provider);
   opentelemetry::sdk::metrics::Provider::SetMeterProvider(api_provider);
+#else
+  (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 }

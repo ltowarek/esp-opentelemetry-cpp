@@ -12,7 +12,6 @@
 #include "opentelemetry/context/propagation/global_propagator.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
-#include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/batch_span_processor_options.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
@@ -67,7 +66,8 @@ static std::unique_ptr<sdk_trace::SpanExporter> MakeExporter(
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
-void esp_opentelemetry_tracing_setup(const char* service_name) {
+void esp_opentelemetry_tracing_setup(
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
   bool expected = false;
   if (!g_initialised.compare_exchange_strong(expected, true)) {
     return;
@@ -95,8 +95,7 @@ void esp_opentelemetry_tracing_setup(const char* service_name) {
         new sdk_trace::BatchSpanProcessor(std::move(exporter), batch_options));
   }
 
-  auto resource = sdk_res::Resource::Create(
-      {{"service.name", service_name ? service_name : kTracerName}});
+  auto resource = sdk_res::Resource::Create(resource_attrs);
 
   auto provider = sdk_trace::TracerProviderFactory::Create(std::move(processor),
                                                             resource);
@@ -107,10 +106,9 @@ void esp_opentelemetry_tracing_setup(const char* service_name) {
       nostd_api::shared_ptr<context_api::propagation::TextMapPropagator>(
           new trace_api::propagation::HttpTraceContext()));
 
-  ESP_LOGI(TAG, "OpenTelemetry tracing enabled for %s -> %s",
-           service_name ? service_name : kTracerName, endpoint.c_str());
+  ESP_LOGI(TAG, "OpenTelemetry tracing enabled -> %s", endpoint.c_str());
 #else
-  (void)service_name;
+  (void)resource_attrs;
 #endif
 }
 

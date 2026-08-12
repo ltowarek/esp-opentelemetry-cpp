@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//   esp_opentelemetry_metrics_setup();   // once, after Wi-Fi is up
+//   esp_opentelemetry_metrics_setup({{"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}});   // once, after Wi-Fi is up
 //   auto meter = opentelemetry::metrics::Provider::GetMeterProvider()
 //                    ->GetMeter(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
 //   auto counter = meter->CreateUInt64Counter("my.counter");
@@ -18,14 +18,16 @@
 #include <cstdint>
 
 #include "opentelemetry/metrics/observer_result.h"
+#include "opentelemetry/sdk/resource/resource.h"
 
 // Install the global meter provider: a PeriodicExportingMetricReader
 // (CONFIG_ESP_OPENTELEMETRY_METRICS_EXPORT_INTERVAL_MS) feeding the OTLP/HTTP
 // metric exporter at CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL. A no-op
 // when CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is off or the base URL is
 // empty — instruments registered via the API's no-op provider are silently
-// dropped.
-void esp_opentelemetry_metrics_setup();
+// dropped. resource_attrs becomes the meter's resource as-is.
+void esp_opentelemetry_metrics_setup(
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience over the ObserverResult variant API for asynchronous-gauge
 // callbacks. Safe (no-op) when metrics are disabled.

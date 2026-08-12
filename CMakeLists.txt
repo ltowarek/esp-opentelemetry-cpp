@@ -14,6 +14,7 @@
 # third_party/ and built as part of this component.
 
 set(ESP_OPENTELEMETRY_SRCS
+    src/integration/esp_git_ref.cpp
     src/integration/esp_metrics.cpp
     src/integration/esp_tracing.cpp
     src/workarounds/posix_shims.c
@@ -45,6 +46,14 @@ endif()
 set(ESP_OPENTELEMETRY_CPP_API_INCLUDE
     "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/api/include")
 
+# sdk/resource is also header-only (ResourceAttributes/Resource declarations
+# only; Resource::Create() etc. live in the SDK library, only linked when
+# tracing or metrics is enabled). esp_tracing.hpp/esp_metrics.hpp reference
+# these types in their public signatures unconditionally, so this must be on
+# the include path even when the SDK library itself isn't built.
+set(ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE
+    "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/sdk/include")
+
 set(ESP_OPENTELEMETRY_REQUIRES
     esp_http_client
     pthread
@@ -65,7 +74,7 @@ list(APPEND ESP_OPENTELEMETRY_REQUIRES
 
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}
-    INCLUDE_DIRS "include" "${ESP_OPENTELEMETRY_CPP_API_INCLUDE}"
+    INCLUDE_DIRS "include" "${ESP_OPENTELEMETRY_CPP_API_INCLUDE}" "${ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE}"
     PRIV_INCLUDE_DIRS "src/integration"
     REQUIRES ${ESP_OPENTELEMETRY_REQUIRES}
 )

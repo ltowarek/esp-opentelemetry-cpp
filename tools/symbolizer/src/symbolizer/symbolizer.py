@@ -60,9 +60,12 @@ class Symbolizer:
         self._elf_globs = [g for g in elf_globs.split(":") if g]
         # (path -> (mtime, size, sha256)) so rebuilt ELFs are re-hashed.
         self._hash_cache: dict[str, tuple[float, int, str]] = {}
-        # (elf_path, address) -> (function, file, line); addresses repeat
+        # (build_id, address) -> (function, file, line); addresses repeat
         # almost entirely between export windows, so addr2line is only spawned
-        # for never-seen addresses.
+        # for never-seen addresses. Keyed by build_id (the ELF's own content
+        # hash), not its path -- a rebuilt firmware reuses the same build
+        # output path, and keying by path alone would serve stale
+        # resolutions from the previous build at addresses that moved.
         self._addr_cache: dict[tuple[str, int], tuple[str, str, int]] = {}
         self._addr2line = shutil.which(ADDR2LINE)
         if self._addr2line is None:
@@ -111,16 +114,18 @@ class Symbolizer:
                 return attr.get("value", {}).get("stringValue")
         return None
 
-    def _resolve(self, elf: str, addresses: list[int]) -> dict[int, tuple[str, str, int]]:
+    def _resolve(
+        self, build_id: str, elf: str, addresses: list[int]
+    ) -> dict[int, tuple[str, str, int]]:
         """addr -> (function, file, line); innermost frame only (no -i).
 
-        Memoized per (elf, address): only never-seen addresses reach
+        Memoized per (build_id, address): only never-seen addresses reach
         addr2line, and windows with no new addresses spawn no subprocess.
         """
         result: dict[int, tuple[str, str, int]] = {}
         misses: list[int] = []
         for addr in addresses:
-            hit = self._addr_cache.get((elf, addr))
+            hit = self._addr_cache.get((build_id, addr))
             if hit is not None:
                 result[addr] = hit
             else:
@@ -128,7 +133,7 @@ class Symbolizer:
         if misses:
             fresh = self._resolve_uncached(elf, misses)
             for addr, res in fresh.items():
-                self._addr_cache[(elf, addr)] = res
+                self._addr_cache[(build_id, addr)] = res
             result.update(fresh)
         return result
 
@@ -160,14 +165,15 @@ class Symbolizer:
         d = profiles.get("dictionary")
         if not d:
             return profiles
-        elf = self.elf_for_build_id(self._build_id(d))
+        build_id = self._build_id(d)
+        elf = self.elf_for_build_id(build_id)
         if not elf or self._addr2line is None:
             log.info("no ELF/addr2line for build; forwarding unsymbolized")
             return profiles
 
         locations = d.get("locationTable", [])
         addresses = [int(loc["address"]) for loc in locations if "address" in loc]
-        resolved = self._resolve(elf, addresses)
+        resolved = self._resolve(build_id, elf, addresses)
 
         strings: list[str] = d.setdefault("stringTable", [""])
         string_index: dict[str, int] = {s: i for i, s in enumerate(strings)}

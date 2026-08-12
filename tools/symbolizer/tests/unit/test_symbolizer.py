@@ -47,7 +47,7 @@ class _StubSymbolizer(Symbolizer):
         super().__init__(str(tmp_path))
         self._addr2line = "stub"  # bypass shutil.which gate
 
-    def _resolve(self, elf, addresses):
+    def _resolve(self, build_id, elf, addresses):
         return {a: _RESOLUTION[a] for a in addresses}
 
 
@@ -108,6 +108,30 @@ def test_symbolize_builds_functions_and_trims_isr(tmp_path):
 def test_no_elf_forwards_unsymbolized(tmp_path):
     out = _StubSymbolizer(tmp_path).symbolize(_profile("missing"))
     assert out["dictionary"]["functionTable"] == []
+
+
+def test_addr_cache_does_not_leak_across_rebuilds_at_same_path(tmp_path):
+    """A rebuilt firmware reuses the same build output path but has
+    different content (and a different build_id) -- the cache must not
+    serve address resolutions from the earlier build at that path."""
+    s = Symbolizer(str(tmp_path))
+    calls: list[list[int]] = []
+
+    def fake_resolve_uncached(elf, addresses):
+        calls.append(list(addresses))
+        return {a: (f"func_{a}", "file.c", a) for a in addresses}
+
+    s._resolve_uncached = fake_resolve_uncached
+
+    first = s._resolve("build-1", "/firmware/build/app.elf", [100])
+    assert first[100] == ("func_100", "file.c", 100)
+    assert calls == [[100]]
+
+    # Same path, same address, but a different build_id (a rebuild) --
+    # must be treated as a cache miss, not served from build-1's entry.
+    second = s._resolve("build-2", "/firmware/build/app.elf", [100])
+    assert second[100] == ("func_100", "file.c", 100)
+    assert calls == [[100], [100]]
 
 
 def test_fully_trimmed_stack_drops_its_samples(tmp_path):

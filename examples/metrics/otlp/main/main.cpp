@@ -87,7 +87,7 @@ extern "C" void app_main()
     }
     ESP_LOGI(TAG, "Wi-Fi connected");
 
-    esp_opentelemetry_metrics_setup();
+    esp_opentelemetry_metrics_setup({{"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}});
 
     ESP_LOGI(TAG, "Metrics OTLP base URL: %s",
              CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL);
