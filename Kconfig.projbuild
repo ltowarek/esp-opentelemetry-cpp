@@ -3,6 +3,22 @@ menu "OpenTelemetry"
         string "Service name resource attribute"
         default "esp-opentelemetry-cpp"
 
+    config ESP_OPENTELEMETRY_SERVICE_REPOSITORY
+        string "Service repository resource attribute (GitHub URL)"
+        default ""
+        help
+            GitHub repository URL, e.g. "https://github.com/org/repo".
+            Stamped as service_repository (profiles) and
+            vcs.repository.url.full (traces/metrics). Empty omits both.
+
+    config ESP_OPENTELEMETRY_SERVICE_ROOT_PATH
+        string "Service root path resource attribute"
+        default ""
+        help
+            Path within the repository where this service's code lives.
+            Stamped as service_root_path on profiles only. Empty omits the
+            attribute.
+
     config ESP_OPENTELEMETRY_TRACING_ENABLED
         bool "Enable OpenTelemetry tracing"
         default n

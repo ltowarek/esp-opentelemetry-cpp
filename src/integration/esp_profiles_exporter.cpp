@@ -24,6 +24,7 @@ extern "C" {
 
 #include <cJSON.h>
 
+#include "esp_git_ref.hpp"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/trace/span_id.h"
 
@@ -238,6 +239,21 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   cJSON_AddStringToObject(svc, "key", "service.name");
   cJSON_AddItemToObject(svc, "value", value_string(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME));
   cJSON_AddItemToArray(resource_attr, svc);
+
+  // Dotless keys, matching Grafana's convention; empty value omits the attribute.
+  auto add_resource_attr = [&](const char* key, const char* value) {
+    if (value == nullptr || value[0] == '\0') {
+      return;
+    }
+    cJSON* attr = cJSON_CreateObject();
+    cJSON_AddStringToObject(attr, "key", key);
+    cJSON_AddItemToObject(attr, "value", value_string(value));
+    cJSON_AddItemToArray(resource_attr, attr);
+  };
+  add_resource_attr("service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
+  add_resource_attr("service_git_ref", esp_opentelemetry::current_git_ref());
+  add_resource_attr("service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
+
   cJSON* resource = cJSON_CreateObject();
   cJSON_AddItemToObject(resource, "attributes", resource_attr);
 

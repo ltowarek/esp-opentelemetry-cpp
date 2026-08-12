@@ -84,7 +84,7 @@ extern "C" void app_main()
 
     // The component routes the BatchSpanProcessor's export thread to a 64 KB
     // PSRAM stack internally.
-    esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+    esp_opentelemetry_tracing_setup({{"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}});
 
     auto tracer = esp_opentelemetry_tracer();
 

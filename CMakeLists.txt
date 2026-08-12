@@ -14,6 +14,7 @@
 # third_party/ and built as part of this component.
 
 set(ESP_OPENTELEMETRY_SRCS
+    src/integration/esp_git_ref.cpp
     src/integration/esp_metrics.cpp
     src/integration/esp_tracing.cpp
     src/workarounds/posix_shims.c
