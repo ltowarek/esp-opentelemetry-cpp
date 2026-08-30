@@ -21,6 +21,7 @@ idf_component_register(SRCS "main.cpp"
 // Once, after Wi-Fi is up:
 esp_opentelemetry_tracing_setup(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);  // traces
 esp_opentelemetry_metrics_setup();                                       // metrics provider
+esp_opentelemetry_logs_setup();                                          // logs provider
 esp_opentelemetry_profiling_setup();                                     // statistical CPU profiler + span->profile link
 
 // Create spans:
@@ -33,6 +34,27 @@ span->End();
 auto meter = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter("my-device");
 ```
 
+Ship a translation unit's existing `ESP_LOG` output by including one header —
+the call sites keep their text and their console output:
+
+```cpp
+#include "esp_log.h"
+#include "esp_log_otel.h"   // redefines ESP_LOGE/W/I; opt-in per translation unit
+
+ESP_LOGI(TAG, "connected to %s", ssid);   // also emitted as a log record
+```
+
+Set the system time (SNTP) before emitting records — log records carry
+absolute timestamps, and an ESP32 that has not synced reads as 1970, which
+Loki and other backends reject.
+
+The wrappers respect the project's existing compile-time cap
+(`LOG_LOCAL_LEVEL` / `CONFIG_LOG_MAXIMUM_LEVEL`) rather than adding a second
+filter, and evaluate their arguments exactly once, as the stock macros do. The
+message is formatted once into a
+`CONFIG_ESP_OPENTELEMETRY_LOGS_MAX_BODY_LEN` buffer and truncated there if it
+does not fit — in the console line as well as in the record.
+
 Enable signals via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfig.defaults`:
 
 ```
@@ -41,6 +63,8 @@ CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
 CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL="http://192.168.1.10:4318"
 CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
 CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL="http://192.168.1.10:4318"
 CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
 CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"   # the symbolizer
 CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2     # per-task span slot for span profiles
@@ -57,6 +81,8 @@ When a signal's `..._ENABLED` option is off, the component still compiles and th
 | [`examples/tracing/propagation/`](examples/tracing/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
 | [`examples/metrics/ostream/`](examples/metrics/ostream/) | `OStreamMetricExporter` + `PeriodicExportingMetricReader`; counter and observable gauge printed to the serial console. | None (QEMU) |
 | [`examples/metrics/otlp/`](examples/metrics/otlp/) | `esp_opentelemetry_metrics_setup()`: `PeriodicExportingMetricReader` + `OtlpHttpMetricExporter` (JSON); observable gauge and counter exported to an OTLP receiver. | Wi-Fi |
+| [`examples/logs/ostream/`](examples/logs/ostream/) | `OStreamLogRecordExporter` + `SimpleLogRecordProcessor`; `ESP_LOGx` call sites wrapped by `esp_log_otel.h`, records printed to the serial console. | None (QEMU) |
+| [`examples/logs/otlp/`](examples/logs/otlp/) | `esp_opentelemetry_logs_setup()`: `BatchLogRecordProcessor` + `OtlpHttpLogRecordExporter` (JSON); `ESP_LOGx` output exported to an OTLP receiver. | Wi-Fi |
 | [`examples/profiling/serial/`](examples/profiling/serial/) | Statistical CPU profiler standing alone: self-checked span slot + sampler, OTLP/JSON profiles dumped to the serial console. | None (QEMU) |
 | [`examples/profiling/otlp/`](examples/profiling/otlp/) | Full profiles pipeline: sampler + span profiles exported through the [`tools/symbolizer/`](tools/symbolizer/) into a Grafana-compatible backend. | Wi-Fi |
 
@@ -82,6 +108,8 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 | `src/integration/esp_http_client_transport.cpp` | `HttpClient` implementation backed by `esp_http_client`, passed directly to `OtlpHttpExporter`'s HTTP-client constructor overload ([open-telemetry/opentelemetry-cpp#4071](https://github.com/open-telemetry/opentelemetry-cpp/pull/4071)), replacing libcurl for the OTLP/HTTP exporter |
 | `src/integration/esp_tracing.cpp` | `esp_opentelemetry_tracing_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor (64 KB PSRAM export-thread stack), resource, and W3C propagator via Kconfig |
 | `src/integration/esp_metrics.cpp` | `esp_opentelemetry_metrics_setup()` — `PeriodicExportingMetricReader` + OTLP/HTTP metric exporter; `observe_double/observe_int64` helpers over the `ObserverResult` variant API |
+| `src/integration/esp_logs.cpp` | `esp_opentelemetry_logs_setup()` / `esp_opentelemetry_logger()` — `BatchLogRecordProcessor` + OTLP/HTTP log record exporter; `esp_opentelemetry_log_and_emit()`, the bridge the `esp_log_otel.h` `ESP_LOGx` wrappers expand to |
+| `include/esp_log_otel.h` | `ESP_LOGE`/`ESP_LOGW`/`ESP_LOGI` wrappers capturing the call site's file, line and function, gated on the project's own `ESP_LOG_ENABLED()` compile-time cap. Opt-in per translation unit; not pulled in by `esp_opentelemetry.hpp` |
 | `src/integration/esp_profiling.cpp` | `esp_opentelemetry_profiling_setup()` — per-core gptimer-ISR statistical sampler (`esp_backtrace`), lock-free rings, stack aggregation |
 | `src/integration/esp_profiles_exporter.cpp` | `esp_opentelemetry::export_profiles()` — OTLP profiles (`v1development`) built with cJSON, POSTed via `esp_http_client`; opentelemetry-cpp has no profiles SDK |
 | `src/integration/esp_task_span_slot.cpp` | Per-task active-span slot (FreeRTOS TLS + seqlock) mirroring `Scope` activation — the FreeRTOS analog of Go's goroutine labels; `esp_opentelemetry_active_span_id()` ISR-safe reader; span stamping with the configurable `CONFIG_ESP_OPENTELEMETRY_PROFILES_SPAN_ATTRIBUTE` |
@@ -109,4 +137,8 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | `OtlpHttpMetricExporter` | Linked | — |
 | Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
 | Observable gauge (`AddCallback`) | Tested (QEMU) | [`examples/metrics/ostream/`](examples/metrics/ostream/) |
-| Logs API | Not integrated | — |
+| `OStreamLogRecordExporter` | Tested (QEMU) | [`examples/logs/ostream/`](examples/logs/ostream/) |
+| `SimpleLogRecordProcessor` | Tested (QEMU) | [`examples/logs/ostream/`](examples/logs/ostream/) |
+| `BatchLogRecordProcessor` | Tested (hardware, ESP32-S3) | [`examples/logs/otlp/`](examples/logs/otlp/) |
+| `OtlpHttpLogRecordExporter` (JSON) | Tested (hardware, ESP32-S3; Loki 3.7 / collector 0.156) | [`examples/logs/otlp/`](examples/logs/otlp/) |
+| Log record attributes + `ESP_LOG` call-site capture | Tested (hardware, ESP32-S3 + QEMU) | [`examples/logs/ostream/`](examples/logs/ostream/) (QEMU), [`examples/logs/otlp/`](examples/logs/otlp/) |

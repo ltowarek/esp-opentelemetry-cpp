@@ -143,6 +143,50 @@ menu "OpenTelemetry"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default 5000
 
+    config ESP_OPENTELEMETRY_LOGS_ENABLED
+        bool "Enable OpenTelemetry logs"
+        default n
+        help
+            Compiles the logs SDK and enables
+            esp_opentelemetry_logs_setup(), which installs a
+            BatchLogRecordProcessor exporting via OTLP/HTTP. Include
+            esp_log_otel.h in a translation unit to route its existing
+            ESP_LOGI/W/E call sites through the logger as well.
+
+    config ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL
+        string "Logs OTLP base URL"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default ""
+        help
+            Base URL for OTLP/HTTP log export. The path "/v1/logs" is
+            appended automatically. Required when logs are enabled; when
+            empty, log export stays disabled.
+
+    config ESP_OPENTELEMETRY_LOGS_BATCH_MAX_QUEUE_SIZE
+        int "Max queued log records before drop"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default 128
+        help
+            Records emitted once the queue is full are dropped rather than
+            blocking the logging call site.
+
+    config ESP_OPENTELEMETRY_LOGS_BATCH_SCHEDULE_DELAY_MS
+        int "Batch log record processor schedule delay (ms)"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default 5000
+
+    config ESP_OPENTELEMETRY_LOGS_MAX_BODY_LEN
+        int "Maximum formatted log body length (bytes)"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default 256
+        range 64 1024
+        help
+            The ESP_LOG wrapper formats each message once into a buffer of
+            this size and feeds both the console and the exporter from it, so
+            a log call never allocates from the heap and its arguments are
+            evaluated exactly once. A longer message is truncated in the
+            console line as well as in the record.
+
     config ESP_OPENTELEMETRY_METRICS_ENABLED
         bool "Enable OpenTelemetry metrics"
         default n
