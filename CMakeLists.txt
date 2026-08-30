@@ -2,9 +2,9 @@
 # with the ESP32 / Xtensa toolchain.
 #
 # The vendored SDK (third_party/opentelemetry-cpp) is only compiled when
-# CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED or
-# CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is set, keeping the firmware
-# image small on builds that need neither. When both are disabled, the
+# CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED, CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+# or CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED is set, keeping the firmware
+# image small on builds that need none of them. When all are disabled, the
 # component still compiles and exposes the esp_opentelemetry.hpp API
 # through the header-only opentelemetry-cpp api/ tree, and every tracer
 # call routes to the SDK's built-in no-op provider.
@@ -15,13 +15,15 @@
 
 set(ESP_OPENTELEMETRY_SRCS
     src/integration/esp_git_ref.cpp
+    src/integration/esp_logs.cpp
     src/integration/esp_metrics.cpp
     src/integration/esp_tracing.cpp
     src/workarounds/posix_shims.c
     src/workarounds/esp_heap_align.cpp
 )
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_http_client_transport.cpp)
 endif()
 
@@ -47,8 +49,8 @@ set(ESP_OPENTELEMETRY_CPP_API_INCLUDE
     "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/api/include")
 
 # sdk/resource is also header-only (ResourceAttributes/Resource declarations
-# only; Resource::Create() etc. live in the SDK library, only linked when
-# tracing or metrics is enabled). esp_tracing.hpp/esp_metrics.hpp reference
+# only; Resource::Create() etc. live in the SDK library, only linked when a
+# signal is enabled). esp_tracing.hpp/esp_metrics.hpp/esp_logs.hpp reference
 # these types in their public signatures unconditionally, so this must be on
 # the include path even when the SDK library itself isn't built.
 set(ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE
@@ -98,7 +100,8 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
 # so the conforming operator new wins over any weak default.
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
     # opentelemetry-cpp's architecture autodetection does not understand
     # Xtensa; short-circuit it by exporting ARCH to the value it uses for
     # debug logging only. The SDK's actual codegen does not depend on this
@@ -180,6 +183,12 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         target_link_libraries(${COMPONENT_LIB} PUBLIC
             opentelemetry_metrics
             opentelemetry_exporter_otlp_http_metric)
+    endif()
+
+    if(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC
+            opentelemetry_logs
+            opentelemetry_exporter_otlp_http_log)
     endif()
 
     target_link_libraries(${COMPONENT_LIB}

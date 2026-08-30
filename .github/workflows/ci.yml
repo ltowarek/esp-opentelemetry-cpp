@@ -59,6 +59,11 @@ jobs:
             qemu: true
           - project: metrics/otlp example
             path: examples/metrics/otlp
+          - project: logs/ostream example
+            path: examples/logs/ostream
+            qemu: true
+          - project: logs/otlp example
+            path: examples/logs/otlp
           - project: profiling/serial example
             path: examples/profiling/serial
             qemu: true
