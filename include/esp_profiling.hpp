@@ -2,7 +2,7 @@
 //
 // Usage:
 //
-//   esp_opentelemetry_profiling_setup();   // starts the sampler; self-contained,
+//   esp_opentelemetry_profiling_setup(exporter);   // starts the sampler; self-contained,
 //                                          // no tracing setup required
 //
 // A per-core timer ISR samples the interrupted call stack (esp_backtrace) at
@@ -20,11 +20,25 @@
 
 #pragma once
 
+#include "esp_profiles_exporter.hpp"
+
 #include <cstddef>
+#include <memory>
 #include <cstdint>
 
 // Starts the sampler and installs the per-task span-linking slot. Idempotent;
-// safe to call multiple times.
+// safe to call multiple times, and a repeat call keeps the exporter installed
+// by the first.
+// exporter decides how each ProfilesData document leaves the device; see
+// esp_profiles_exporter.hpp for the ones this component provides. A null
+// exporter leaves the sampler unstarted, the same contract the other signals'
+// setup calls have: no exporter, no signal.
+void esp_opentelemetry_profiling_setup(
+    std::unique_ptr<esp_opentelemetry::ProfilesExporter> exporter);
+
+// Convenience overload: exports over OTLP/HTTP to
+// CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL, matching the other signals'
+// no-exporter overloads. Does nothing when that URL is empty.
 void esp_opentelemetry_profiling_setup();
 
 // Total stack samples captured since startup (0 when profiling is disabled),
@@ -49,12 +63,14 @@ struct ProfileStack {
   uint8_t span_id[8];
 };
 
+// Install the exporter export_profiles() hands each document to. Called by
+// esp_opentelemetry_profiling_setup().
+void set_profiles_exporter(std::unique_ptr<ProfilesExporter> exporter);
+
 // Build an OpenTelemetry profiles (v1development) ProfilesData document from the
-// aggregated stacks and POST it as OTLP/HTTP JSON to
-// CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL. Mirrors the trace/metric OTLP/HTTP
-// exporters (same JSON-over-esp_http_client transport). One Mapping carries the
-// firmware build_id (app_elf_sha256); addresses are left unsymbolized for the
-// host symbolizer. No-op when the endpoint is unset.
+// aggregated stacks and hand it to the installed exporter. One Mapping carries
+// the firmware build_id (app_elf_sha256); addresses are left unsymbolized for
+// the host symbolizer. No-op when no exporter is installed.
 void export_profiles(const ProfileStack* stacks, std::size_t count,
                      int64_t time_unix_nano, int64_t duration_nano);
 

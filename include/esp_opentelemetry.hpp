@@ -6,7 +6,10 @@
 // signal-specific header instead if you only want that signal's declarations.
 //
 // It deliberately does not pull in esp_log_otel.h: that header redefines
-// ESP_LOGx, which is opt-in per translation unit.
+// ESP_LOGx, which is opt-in per translation unit. Nor esp_jtag_exporters.hpp,
+// whose classes pull in the app-trace headers a firmware that exports over the
+// network has no use for; include it directly where a JTAG exporter is
+// constructed.
 
 #pragma once
 

@@ -1,0 +1,118 @@
+# Vector configuration for the JTAG exporters.
+#
+# OpenOCD connects to this socket and streams the app-trace channel verbatim;
+# the firmware writes one OTLP/JSON document per line, so each line is already
+# a valid request body. All four signals share the one channel, so the pipeline
+# routes each line by the top-level key the OTLP schema gives it.
+#
+#   vector --config vector.yaml
+#
+sources:
+  apptrace:
+    type: socket
+    mode: tcp
+    address: 0.0.0.0:53535
+    decoding:
+      codec: bytes
+    framing:
+      method: newline_delimited
+
+transforms:
+  classify:
+    type: remap
+    inputs: [apptrace]
+    source: |
+      # Parse a copy only to read which resource* key the document carries;
+      # .message keeps the original bytes, which are what the sink forwards.
+      parsed, err = parse_json(.message)
+      if err != null {
+        log("dropping unparseable app-trace line: " + err, level: "warn")
+        abort
+      }
+      .signal = "unknown"
+      if exists(parsed.resourceSpans) { .signal = "traces" }
+      if exists(parsed.resourceLogs) { .signal = "logs" }
+      if exists(parsed.resourceMetrics) { .signal = "metrics" }
+      if exists(parsed.resourceProfiles) { .signal = "profiles" }
+
+  route:
+    type: route
+    inputs: [classify]
+    route:
+      traces: '.signal == "traces"'
+      logs: '.signal == "logs"'
+      metrics: '.signal == "metrics"'
+      profiles: '.signal == "profiles"'
+
+sinks:
+  otlp_traces:
+    type: http
+    inputs: [route.traces]
+    uri: http://127.0.0.1:4318/v1/traces
+    method: post
+    encoding:
+      codec: text
+      only_fields: [message]
+    framing:
+      method: newline_delimited
+    request:
+      headers:
+        Content-Type: application/json
+    # One document per request: an OTLP receiver expects a single JSON body,
+    # not a newline-delimited batch of them.
+    batch:
+      max_events: 1
+
+  otlp_logs:
+    type: http
+    inputs: [route.logs]
+    uri: http://127.0.0.1:4318/v1/logs
+    method: post
+    encoding:
+      codec: text
+      only_fields: [message]
+    framing:
+      method: newline_delimited
+    request:
+      headers:
+        Content-Type: application/json
+    batch:
+      max_events: 1
+
+  otlp_metrics:
+    type: http
+    inputs: [route.metrics]
+    uri: http://127.0.0.1:4318/v1/metrics
+    method: post
+    encoding:
+      codec: text
+      only_fields: [message]
+    framing:
+      method: newline_delimited
+    request:
+      headers:
+        Content-Type: application/json
+    batch:
+      max_events: 1
+
+  # Profiles go to the symbolizer, which resolves the raw PCs against the
+  # firmware ELF before forwarding to a collector - see tools/symbolizer/.
+  otlp_profiles:
+    type: http
+    inputs: [route.profiles]
+    uri: http://127.0.0.1:4319/v1development/profiles
+    method: post
+    encoding:
+      codec: text
+      only_fields: [message]
+    framing:
+      method: newline_delimited
+    request:
+      headers:
+        Content-Type: application/json
+    batch:
+      max_events: 1
+
+  unmatched:
+    type: blackhole
+    inputs: [route._unmatched]

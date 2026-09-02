@@ -4,9 +4,15 @@
 
 #include "esp_profiling.hpp"
 
+#include "esp_profiles_exporter.hpp"
+#if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+#include "esp_otlp_http_exporters.hpp"
+#endif
 #include "esp_task_span_slot.hpp"
 
 #include "sdkconfig.h"
+
+#include <utility>
 
 extern "C" {
 #include "driver/gptimer.h"
@@ -307,12 +313,25 @@ void start_timer_on_core(void* arg) {
 
 }  // namespace
 
-void esp_opentelemetry_profiling_setup() {
+void esp_opentelemetry_profiling_setup(
+    std::unique_ptr<esp_opentelemetry::ProfilesExporter> exporter) {
+  if (!exporter) {
+    // Same contract as the other signals: no exporter, no signal. An
+    // application that wants the sampler running without shipping anything -
+    // to read esp_opentelemetry_profiling_samples(), say - can pass an
+    // exporter that discards, which costs it three lines.
+    ESP_LOGW(TAG, "no profiles exporter supplied; profiling disabled.");
+    return;
+  }
+
   static bool started = false;
   if (started) {
     return;
   }
   started = true;
+  // After the guard, so a second call cannot swap the exporter out from under
+  // the running export task.
+  esp_opentelemetry::set_profiles_exporter(std::move(exporter));
 
   // Mirror activated spans into per-task slots so samples can be linked to
   // the span active on the interrupted task (span->profile linking). Owned
@@ -356,6 +375,18 @@ void esp_opentelemetry_profiling_setup() {
 
   ESP_LOGI(TAG, "profiling started: %d Hz/core, depth %d, export every %d ms",
            kSampleHz, kMaxDepth, kExportIntervalMs);
+}
+
+void esp_opentelemetry_profiling_setup() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+  const char* endpoint = CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL;
+  if (endpoint[0] != '\0') {
+    esp_opentelemetry_profiling_setup(
+        esp_opentelemetry::MakeOtlpHttpProfilesExporter(endpoint));
+    return;
+  }
+#endif
+  esp_opentelemetry_profiling_setup(nullptr);
 }
 
 uint32_t esp_opentelemetry_profiling_samples() {

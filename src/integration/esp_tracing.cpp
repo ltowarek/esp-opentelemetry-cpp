@@ -6,12 +6,12 @@
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 #include "esp_export_thread.hpp"
-#include "esp_http_client_transport.hpp"
 #include "esp_log.h"
 
 #include "opentelemetry/context/propagation/global_propagator.h"
-#include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
-#include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
+#if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+#include "esp_otlp_http_exporters.hpp"
+#endif
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/batch_span_processor_options.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
@@ -41,46 +41,26 @@ constexpr const char* kTracerVersion = "1.0.0";
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 
-namespace otlp_api   = opentelemetry::exporter::otlp;
 namespace sdk_trace  = opentelemetry::sdk::trace;
 namespace sdk_res    = opentelemetry::sdk::resource;
 
 static constexpr const char* TAG = "esp_opentelemetry";
 
-static std::unique_ptr<sdk_trace::SpanExporter> MakeExporter(
-    const std::string& endpoint) {
-  otlp_api::OtlpHttpExporterOptions options;
-  options.url          = endpoint + "/v1/traces";
-  options.content_type = otlp_api::HttpRequestContentType::kJson;
-  options.json_bytes_mapping = otlp_api::JsonBytesMappingKind::kHexId;
-  options.use_json_name      = false;
-  options.console_debug      = false;
-  options.timeout            = std::chrono::seconds(10);
-  options.compression        = "none";
-  // HTTP transport is supplied directly via the OtlpHttpExporter(options,
-  // HttpClient) constructor added by open-telemetry/opentelemetry-cpp#4071,
-  // backed by esp_http_client (esp_http_client_transport.cpp).
-  return std::unique_ptr<sdk_trace::SpanExporter>(new otlp_api::OtlpHttpExporter(
-      options, esp_opentelemetry::MakeEspHttpClient()));
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
 void esp_opentelemetry_tracing_setup(
+    std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter,
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+  if (exporter == nullptr) {
+    ESP_LOGW(TAG, "no span exporter supplied; tracing disabled.");
+    return;
+  }
+
   bool expected = false;
   if (!g_initialised.compare_exchange_strong(expected, true)) {
     return;
   }
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL;
-  if (endpoint.empty()) {
-    ESP_LOGW(TAG, "ESP_OPENTELEMETRY endpoint is empty; tracing disabled.");
-    return;
-  }
-
-  auto exporter = MakeExporter(endpoint);
 
   sdk_trace::BatchSpanProcessorOptions batch_options;
   batch_options.max_queue_size        = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE;
@@ -106,7 +86,24 @@ void esp_opentelemetry_tracing_setup(
       nostd_api::shared_ptr<context_api::propagation::TextMapPropagator>(
           new trace_api::propagation::HttpTraceContext()));
 
-  ESP_LOGI(TAG, "OpenTelemetry tracing enabled -> %s", endpoint.c_str());
+  ESP_LOGI(TAG, "OpenTelemetry tracing enabled");
+#else
+  (void)exporter;
+  (void)resource_attrs;
+#endif
+}
+
+void esp_opentelemetry_tracing_setup(
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED) && \
+    defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL;
+  if (endpoint.empty()) {
+    ESP_LOGW(TAG, "tracing base URL is empty; tracing disabled.");
+    return;
+  }
+  esp_opentelemetry_tracing_setup(
+      esp_opentelemetry::MakeOtlpHttpSpanExporter(endpoint), resource_attrs);
 #else
   (void)resource_attrs;
 #endif

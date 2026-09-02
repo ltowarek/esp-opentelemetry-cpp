@@ -22,9 +22,25 @@ set(ESP_OPENTELEMETRY_SRCS
     src/workarounds/esp_heap_align.cpp
 )
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
-   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
-    list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_http_client_transport.cpp)
+# The OTLP/HTTP exporters and the esp_http_client transport behind them are
+# only compiled when that exporter family is selected; their headers come from
+# the SDK's OTLP/HTTP targets, which are not on the include path otherwise.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP AND (CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
+   OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED))
+    list(APPEND ESP_OPENTELEMETRY_SRCS
+        src/integration/esp_http_client_transport.cpp
+        src/integration/esp_otlp_http_exporters.cpp)
+endif()
+
+# The JTAG sources reference esp_apptrace unconditionally; the app-trace
+# component only compiles those symbols when the app-trace transport is
+# selected, which the Kconfig option depends on. esp_jtag_channel.cpp is the
+# shared writer behind all four signals, including profiles, whose exporter is
+# hand-rolled and does not go through esp_jtag_exporters.cpp.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+    list(APPEND ESP_OPENTELEMETRY_SRCS
+        src/integration/esp_jtag_channel.cpp
+        src/integration/esp_jtag_exporters.cpp)
 endif()
 
 # Profiling's sources reference gptimer/cJSON/the app descriptor unconditionally
@@ -33,12 +49,18 @@ endif()
 # API otherwise so callers can call it unconditionally either way.
 if(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
     list(APPEND ESP_OPENTELEMETRY_SRCS
-        src/integration/esp_profiles_exporter.cpp
+        src/integration/esp_profiles_document.cpp
         src/integration/esp_profiling.cpp
         src/integration/esp_task_span_slot.cpp)
 else()
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_profiling_stub.cpp)
 endif()
+
+# The ProfilesExporter factories are transports for a JSON document and do not
+# depend on the sampler, so they follow the exporter families rather than
+# CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED: firmware with profiling off can
+# still name one without failing to link.
+list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_profiles_exporter.cpp)
 
 # The opentelemetry-cpp api/ tree is header-only and compiles without the
 # SDK. Expose it as part of the component's public include path so the
@@ -63,11 +85,14 @@ set(ESP_OPENTELEMETRY_REQUIRES
 )
 
 # REQUIRES cannot be conditioned on CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
-# the way SRCS above is: ESP-IDF expands component requirements before
-# sdkconfig is loaded, so a Kconfig-conditional REQUIRES silently misses these
-# regardless of the config value — they stay unconditional (harmless extra
-# link-time dependency when profiling is disabled).
+# or CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG the way SRCS above is:
+# ESP-IDF expands component requirements before sdkconfig is loaded, so a
+# Kconfig-conditional REQUIRES silently misses these regardless of the config
+# value — they stay unconditional (a harmless extra link-time dependency when
+# profiling or the JTAG exporter is disabled; app_trace itself compiles to
+# nothing unless its transport is selected).
 list(APPEND ESP_OPENTELEMETRY_REQUIRES
+    app_trace
     cjson
     esp_app_format
     esp_hw_support
@@ -79,6 +104,7 @@ idf_component_register(
     INCLUDE_DIRS "include" "${ESP_OPENTELEMETRY_CPP_API_INCLUDE}" "${ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE}"
     PRIV_INCLUDE_DIRS "src/integration"
     REQUIRES ${ESP_OPENTELEMETRY_REQUIRES}
+    LDFRAGMENTS "src/workarounds/pb_defaults.lf"
 )
 
 # Force the linker to keep our POSIX shims (nanosleep, pthread_atfork)
@@ -99,6 +125,14 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
 # onto the link line before the linker encounters any C++ allocation site,
 # so the conforming operator new wins over any weak default.
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
+# protobuf reads __start_pb_defaults/__stop_pb_defaults, which a linker
+# synthesises only for an output section of that name. src/workarounds/
+# pb_defaults.lf merges the section into flash_rodata instead, so the pair is
+# defined here as an empty range — see that file for why walking nothing is
+# correct. Defined unconditionally: unreferenced in builds that never emit the
+# section.
+idf_build_set_property(LINK_OPTIONS "-Wl,--defsym=__start_pb_defaults=0" APPEND)
+idf_build_set_property(LINK_OPTIONS "-Wl,--defsym=__stop_pb_defaults=0" APPEND)
 
 if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
    OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
@@ -117,6 +151,18 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     set(WITH_FUNC_TESTS       OFF CACHE BOOL "" FORCE)
     set(WITH_BENCHMARK        OFF CACHE BOOL "" FORCE)
     set(WITH_OTLP_GRPC        OFF CACHE BOOL "" FORCE)
+    # The JTAG exporters reuse the OTLP file exporters' OTLP/JSON serialisation
+    # with an app-trace appender in place of a file, so each of this
+    # component's exporter families maps onto one of the SDK's. The rest of
+    # this file assumes protobuf is materialised (protobuf_setup.cmake, the
+    # int32_t override, the INTERFACE libprotobuf link), so OTLP/HTTP stays on
+    # even for an ostream-only build; dropping protobuf when no OTLP exporter
+    # is compiled is issue #38.
+    if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+        set(WITH_OTLP_FILE    ON  CACHE BOOL "" FORCE)
+    else()
+        set(WITH_OTLP_FILE    OFF CACHE BOOL "" FORCE)
+    endif()
     set(WITH_OTLP_HTTP        ON  CACHE BOOL "" FORCE)
     set(WITH_PROMETHEUS       OFF CACHE BOOL "" FORCE)
     set(WITH_ZIPKIN           OFF CACHE BOOL "" FORCE)
@@ -173,22 +219,45 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     target_include_directories(${COMPONENT_LIB} BEFORE PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/workarounds/absl_shadow")
 
+    # Each signal links its SDK plus the exporter for the selected transport;
+    # the unselected transport's exporter is never built into the image.
     if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC
-            opentelemetry_trace
-            opentelemetry_exporter_otlp_http)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_trace)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_http)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_span)
+        endif()
     endif()
 
     if(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC
-            opentelemetry_metrics
-            opentelemetry_exporter_otlp_http_metric)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_metrics)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_http_metric)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file_metric)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_metrics)
+        endif()
     endif()
 
     if(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
-        target_link_libraries(${COMPONENT_LIB} PUBLIC
-            opentelemetry_logs
-            opentelemetry_exporter_otlp_http_log)
+        target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_logs)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_http_log)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file_log)
+        endif()
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+            target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_logs)
+        endif()
     endif()
 
     target_link_libraries(${COMPONENT_LIB}
