@@ -6,3 +6,15 @@ updates:
       interval: "weekly"
     labels:
       - "dependencies"
+    ignore:
+      # third_party/protobuf is pinned to release tag v36.0, not a branch
+      # tip: protoc emits an exact-match version guard against the vendored
+      # runtime, and only release tags ship an official prebuilt protoc
+      # binary. Dependabot's gitsubmodule updates track the tip of the
+      # submodule's default branch, not tags -- left unpinned it walked this
+      # same submodule to an unreleased dev commit (`v36-dev-353`) every
+      # week for months (dependabot-auto-merge.yml squash-merges these
+      # automatically), which is what broke this in the first place. Bump
+      # this submodule manually to a new release tag instead, updating
+      # .devcontainer/install-protoc.sh's PROTOC_VERSION to match.
+      - dependency-name: "third_party/protobuf"
