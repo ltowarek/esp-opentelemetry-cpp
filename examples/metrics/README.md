@@ -2,11 +2,8 @@
 
 `OStreamMetricExporter` + the metrics setup: a counter printed to the serial console every export interval. No network and no debugger, so it runs under QEMU.
 
-The exporter is constructed here in `main.cpp` and passed to the setup call —
-the application chooses its exporter, as it does with the upstream SDK. Swap in
-`esp_opentelemetry::MakeOtlpHttp*Exporter()` or a `Jtag*Exporter` and nothing
-else about the example changes; [`../otlp/`](../otlp/) and
-[`../jtag/`](../jtag/) do exactly that for every signal at once.
+The exporter is constructed in `main.cpp` and passed to the setup call, the
+same way application code selects an exporter upstream.
 
 ## Build
 

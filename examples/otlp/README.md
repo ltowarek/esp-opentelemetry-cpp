@@ -4,13 +4,6 @@ Every signal over OTLP/HTTP. `main.cpp` constructs a `MakeOtlpHttp*Exporter()`
 per signal and passes each to the matching `esp_opentelemetry_*_setup()` call.
 Brings up Wi-Fi and sets the clock over SNTP first.
 
-[`../jtag/`](../jtag/) is the same example with `Jtag*Exporter`s in place of
-those four, and without the Wi-Fi and SNTP bring-up that exporting over the
-network requires. The per-signal examples ([`../traces/`](../traces/),
-[`../metrics/`](../metrics/), [`../logs/`](../logs/),
-[`../profiles/`](../profiles/)) show one signal each with the console
-exporters.
-
 ## What to observe
 
 Once a second: a `work.iteration` span with a `work.step` child, an
@@ -35,9 +28,9 @@ CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"
 
 The three differ in practice: metrics often go to a Prometheus-compatible
 store's own OTLP endpoint, and profiles go to the symbolizer
-([`tools/symbolizer/`](../../tools/symbolizer/)), which resolves raw PCs
-against the firmware ELF before forwarding. A signal whose URL is empty stays
-disabled.
+([`tools/symbolizer/`](../../tools/symbolizer/)), which resolves raw program
+counters against the firmware ELF before forwarding. A signal whose URL is
+empty stays disabled.
 
 ## Timestamps
 

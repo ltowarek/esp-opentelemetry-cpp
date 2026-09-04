@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "opentelemetry/metrics/provider.h"
+#include "opentelemetry/sdk/trace/simple_processor_factory.h"
 #include "opentelemetry/trace/scope.h"
 
 #include <cstdint>
@@ -13,13 +14,12 @@ static const char *TAG = "jtag-example";
 
 extern "C" void app_main()
 {
-    // One exporter per signal, all writing to the same app-trace channel.
-    // Swapping these for MakeOtlpHttp*Exporter() is the only difference
-    // between this example and ../otlp/.
     const opentelemetry::sdk::resource::ResourceAttributes resource{
         {"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}};
     esp_opentelemetry_tracing_setup(
-        std::make_unique<esp_opentelemetry::JtagSpanExporter>(), resource);
+        opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(
+            std::make_unique<esp_opentelemetry::JtagSpanExporter>()),
+        resource);
     esp_opentelemetry_logs_setup(
         std::make_unique<esp_opentelemetry::JtagLogRecordExporter>(), resource);
     esp_opentelemetry_metrics_setup(
@@ -34,7 +34,7 @@ extern "C" void app_main()
 
     // Emitted on a loop so signals keep arriving after OpenOCD attaches. Until
     // it does, app-trace runs in post-mortem mode and overwrites them.
-    for (unsigned iteration = 0;; ++iteration) {
+    for (int iteration = 0;; ++iteration) {
         auto parent = tracer->StartSpan("work.iteration");
         parent->SetAttribute("example.type", "jtag");
         parent->SetAttribute("iteration", static_cast<int64_t>(iteration));
@@ -49,7 +49,7 @@ extern "C" void app_main()
         counter->Add(1);
         logger->Info("iteration complete");
 
-        ESP_LOGI(TAG, "emitted iteration %u", iteration);
+        ESP_LOGI(TAG, "emitted iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

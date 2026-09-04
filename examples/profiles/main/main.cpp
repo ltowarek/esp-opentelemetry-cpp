@@ -11,7 +11,7 @@ extern "C" void app_main()
     // the application picks an implementation the same way.
     esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeConsoleProfilesExporter());
 
-    for (unsigned iteration = 0; iteration < 5; ++iteration) {
+    for (int iteration = 0; iteration < 5; ++iteration) {
         // Burn a little CPU so the sampler has stacks to aggregate.
         volatile uint32_t sink = 0;
         for (uint32_t i = 0; i < 200000; ++i) {
@@ -19,7 +19,7 @@ extern "C" void app_main()
         }
         (void)sink;
 
-        ESP_LOGI(TAG, "iteration %u", iteration);
+        ESP_LOGI(TAG, "iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 

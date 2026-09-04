@@ -16,10 +16,10 @@ extern "C" void app_main()
 
     auto logger = esp_opentelemetry_logger();
 
-    for (unsigned iteration = 0; iteration < 5; ++iteration) {
+    for (int iteration = 0; iteration < 5; ++iteration) {
         logger->Info("iteration complete");
 
-        ESP_LOGI(TAG, "iteration %u", iteration);
+        ESP_LOGI(TAG, "iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 

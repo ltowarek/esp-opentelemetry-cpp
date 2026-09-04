@@ -27,6 +27,7 @@
 #pragma once
 
 #include "opentelemetry/sdk/logs/exporter.h"
+#include "opentelemetry/sdk/logs/processor.h"
 
 #include <memory>
 
@@ -34,17 +35,22 @@
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/sdk/resource/resource.h"
 
-// Install the global logger provider: a BatchLogRecordProcessor
-// (CONFIG_ESP_OPENTELEMETRY_LOGS_BATCH_*) feeding the OTLP/HTTP log record
-// exporter at CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL. A no-op when
-// CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED is off or the base URL is empty.
-// resource_attrs becomes the logger's resource as-is. Safe to call multiple
-// times; subsequent calls are ignored.
 // Initialise the global logger provider with the given exporter, wrapped in a
 // BatchLogRecordProcessor. The exporter is the caller's choice, as it is
 // upstream - see esp_otlp_http_exporters.hpp and esp_jtag_exporters.hpp.
 void esp_opentelemetry_logs_setup(
     std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
+
+// Initialise the global logger provider with the given processor.
+// resource_attrs becomes the logger's resource as-is. Safe to call multiple
+// times; subsequent calls are ignored.
+//
+// Use this overload to install a SimpleLogRecordProcessor, or any other
+// processor the SDK provides, instead of the BatchLogRecordProcessor the
+// exporter-taking overload always installs.
+void esp_opentelemetry_logs_setup(
+    std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor> processor,
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience overload: exports over OTLP/HTTP to

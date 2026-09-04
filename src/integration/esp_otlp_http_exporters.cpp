@@ -54,8 +54,6 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporte
     const std::string& base_url) {
   otlp_api::OtlpHttpExporterOptions options;
   ApplyCommon(options, base_url + "/v1/traces");
-  // The HTTP transport is supplied directly via the (options, HttpClient)
-  // constructor added by open-telemetry/opentelemetry-cpp#4071.
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(options, MakeEspHttpClient()));
 }

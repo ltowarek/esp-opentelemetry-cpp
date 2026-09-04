@@ -2,20 +2,21 @@
 
 Every signal over one JTAG app-trace channel. `main.cpp` constructs a
 `Jtag*Exporter` per signal and passes each to the matching
-`esp_opentelemetry_*_setup()` call — swapping those four constructor calls for
-`MakeOtlpHttp*Exporter()` is the only difference between this example and
-[`../otlp/`](../otlp/). Each
-document is written as OTLP/JSON — the same encoding the OTLP/HTTP exporters
-send, one document per line — and OpenOCD streams the channel to a host-side
-forwarder that POSTs each line to an OTLP collector. The device needs no
-network connection.
+`esp_opentelemetry_*_setup()` call. Each document is written as OTLP/JSON —
+the same encoding the OTLP/HTTP exporters send, one document per line — and
+OpenOCD streams the channel to a host-side forwarder that POSTs each line to
+an OTLP collector. The device needs no network connection.
 
-```
-firmware (JTAG exporters → esp_apptrace)
-    → OpenOCD "esp apptrace start tcp://127.0.0.1:53535"
-    → Vector (socket source → route by signal → http sinks)
-    → OTLP collector /v1/traces, /v1/logs, /v1/metrics
-      and the symbolizer /v1development/profiles
+```mermaid
+flowchart LR
+    FW["firmware<br/>JTAG exporters → esp_apptrace"]
+    OCD["OpenOCD<br/>esp apptrace start tcp://127.0.0.1:53535"]
+    VEC["Vector<br/>socket source → route by signal → http sinks"]
+    COL["OTLP collector<br/>/v1/traces, /v1/logs, /v1/metrics"]
+    SYM["symbolizer<br/>/v1development/profiles"]
+
+    FW --> OCD --> VEC --> COL
+    VEC --> SYM
 ```
 
 The four signals interleave on one channel, so the exporters serialise on a
@@ -57,7 +58,7 @@ routes each line by its top-level `resourceSpans` / `resourceLogs` /
 endpoint. Narrow `address` to `127.0.0.1` when OpenOCD runs on the same host,
 and point each `uri` at your own collector if it is elsewhere. Profiles go to
 the symbolizer (`tools/symbolizer/`), not the collector, because the device
-ships raw PCs.
+ships raw program counters.
 
 Then attach OpenOCD and start the app-trace stream. For a board with the
 built-in USB JTAG (ESP32-S3, ESP32-C3, …):
@@ -81,15 +82,6 @@ replace the board config with the one for your probe.
 To inspect the raw stream without a collector, point OpenOCD at a file
 (`file:///tmp/apptrace.json`) or listen with `nc -l 53535` in place of Vector.
 Each line is a complete OTLP/JSON document.
-
-## Fluent Bit
-
-Vector is used here because its `http` sink forwards a record's raw text
-unchanged, which is all this pipeline needs. Fluent Bit's `http` output offers
-`json`, `json_stream` and `msgpack`, each of which wraps the record in its own
-structure rather than sending it verbatim, so an equivalent Fluent Bit
-pipeline requires a filter or a custom output plugin. Only the Vector pipeline
-is verified.
 
 ## Timestamps
 
@@ -125,7 +117,8 @@ period whether or not OpenOCD is attached.
 
 `CONFIG_ESP_OPENTELEMETRY_JTAG_TIMEOUT_US` bounds the other case: a
 host *is* connected but has not yet drained the pending block, where a write
-waits up to that long before the document is dropped. The Batch processors and
-the metric reader export from their own threads, so that wait is paid there
-rather than by the task that ended the span; lower it (0 never blocks) if the
-firmware is timing-sensitive.
+waits up to that long before the document is dropped. The log and metric
+signals export from their own Batch processor thread, so that wait is paid
+there; this example wires spans to a `SimpleSpanProcessor`, which has no such
+thread, so a span-ending call pays the wait directly. Lower the timeout (0
+never blocks) if the firmware is timing-sensitive.

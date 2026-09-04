@@ -21,7 +21,7 @@ extern "C" void app_main()
 
     auto tracer = esp_opentelemetry_tracer();
 
-    for (unsigned iteration = 0; iteration < 5; ++iteration) {
+    for (int iteration = 0; iteration < 5; ++iteration) {
         auto parent = tracer->StartSpan("work.iteration");
         parent->SetAttribute("example.type", "traces");
         parent->SetAttribute("iteration", static_cast<int64_t>(iteration));
@@ -33,7 +33,7 @@ extern "C" void app_main()
         }
         parent->End();
 
-        ESP_LOGI(TAG, "iteration %u", iteration);
+        ESP_LOGI(TAG, "iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 

@@ -3,9 +3,9 @@
 // Signals are serialised with the same OTLP/JSON encoding the OTLP/HTTP
 // exporters send — one request document per line, newline-delimited — and
 // written to ESP-IDF's app-trace channel. A host-side reader —
-// `openocd ... -c "esp apptrace start tcp://..."` feeding Vector or
-// Fluent Bit — forwards those lines to an OTLP/HTTP collector, so nothing on
-// the host has to understand telemetry.
+// `openocd ... -c "esp apptrace start tcp://..."` feeding Vector —
+// forwards those lines to an OTLP/HTTP collector, so nothing on the host has
+// to understand telemetry.
 //
 // Usage:
 //
@@ -63,11 +63,12 @@
 namespace esp_opentelemetry {
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-// esp_opentelemetry_tracing_setup() wraps this in a BatchSpanProcessor, so a
-// batch - not a single span - is what reaches the channel; the writer chunks it
-// to fit the app-trace buffer. Build the provider yourself with a
-// SimpleSpanProcessor to flush per span instead, which keeps each document
-// small at the cost of an export on every span end.
+// The exporter-taking esp_opentelemetry_tracing_setup() overload wraps this in
+// a BatchSpanProcessor, so a batch - not a single span - is what reaches the
+// channel; the writer chunks it to fit the app-trace buffer. Pass a
+// SimpleSpanProcessor to the processor-taking overload instead to flush per
+// span, which keeps each document small at the cost of an export on every
+// span end.
 class JtagSpanExporter final : public opentelemetry::sdk::trace::SpanExporter {
  public:
   JtagSpanExporter();

@@ -95,8 +95,9 @@ sinks:
     batch:
       max_events: 1
 
-  # Profiles go to the symbolizer, which resolves the raw PCs against the
-  # firmware ELF before forwarding to a collector - see tools/symbolizer/.
+  # Profiles go to the symbolizer, which resolves the raw program counters
+  # against the firmware ELF before forwarding to a collector - see
+  # tools/symbolizer/.
   otlp_profiles:
     type: http
     inputs: [route.profiles]

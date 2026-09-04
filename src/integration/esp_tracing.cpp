@@ -57,11 +57,6 @@ void esp_opentelemetry_tracing_setup(
     return;
   }
 
-  bool expected = false;
-  if (!g_initialised.compare_exchange_strong(expected, true)) {
-    return;
-  }
-
   sdk_trace::BatchSpanProcessorOptions batch_options;
   batch_options.max_queue_size        = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE;
   batch_options.schedule_delay_millis =
@@ -73,6 +68,27 @@ void esp_opentelemetry_tracing_setup(
     esp_opentelemetry::ScopedExportThreadConfig export_thread_cfg;
     processor = std::unique_ptr<sdk_trace::SpanProcessor>(
         new sdk_trace::BatchSpanProcessor(std::move(exporter), batch_options));
+  }
+
+  esp_opentelemetry_tracing_setup(std::move(processor), std::move(resource_attrs));
+#else
+  (void)exporter;
+  (void)resource_attrs;
+#endif
+}
+
+void esp_opentelemetry_tracing_setup(
+    std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+  if (processor == nullptr) {
+    ESP_LOGW(TAG, "no span processor supplied; tracing disabled.");
+    return;
+  }
+
+  bool expected = false;
+  if (!g_initialised.compare_exchange_strong(expected, true)) {
+    return;
   }
 
   auto resource = sdk_res::Resource::Create(resource_attrs);
@@ -88,7 +104,7 @@ void esp_opentelemetry_tracing_setup(
 
   ESP_LOGI(TAG, "OpenTelemetry tracing enabled");
 #else
-  (void)exporter;
+  (void)processor;
   (void)resource_attrs;
 #endif
 }

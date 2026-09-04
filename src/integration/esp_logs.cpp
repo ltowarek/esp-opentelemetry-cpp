@@ -105,11 +105,6 @@ void esp_opentelemetry_logs_setup(
     return;
   }
 
-  bool expected = false;
-  if (!g_initialised.compare_exchange_strong(expected, true)) {
-    return;
-  }
-
   sdk_logs::BatchLogRecordProcessorOptions batch_options;
   batch_options.max_queue_size = CONFIG_ESP_OPENTELEMETRY_LOGS_BATCH_MAX_QUEUE_SIZE;
   batch_options.schedule_delay_millis =
@@ -123,6 +118,27 @@ void esp_opentelemetry_logs_setup(
         new sdk_logs::BatchLogRecordProcessor(std::move(exporter), batch_options));
   }
 
+  esp_opentelemetry_logs_setup(std::move(processor), std::move(resource_attrs));
+#else
+  (void)exporter;
+  (void)resource_attrs;
+#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
+}
+
+void esp_opentelemetry_logs_setup(
+    std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor> processor,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+  if (processor == nullptr) {
+    ESP_LOGW(TAG, "no log record processor supplied; logs disabled.");
+    return;
+  }
+
+  bool expected = false;
+  if (!g_initialised.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
   auto resource = sdk_res::Resource::Create(resource_attrs);
   auto provider = sdk_logs::LoggerProviderFactory::Create(std::move(processor), resource);
   std::shared_ptr<logs_api::LoggerProvider> api_provider = std::move(provider);
@@ -130,7 +146,7 @@ void esp_opentelemetry_logs_setup(
 
   ESP_LOGI(TAG, "OpenTelemetry logs enabled");
 #else
-  (void)exporter;
+  (void)processor;
   (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 }

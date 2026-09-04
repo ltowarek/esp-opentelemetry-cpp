@@ -1,9 +1,8 @@
 // OTLP/HTTP exporters bound to esp_http_client.
 //
-// opentelemetry-cpp's own OtlpHttp*ExporterFactory::Create() builds a libcurl
-// client, which does not cross-compile to Xtensa. These factories are the same
-// exporters with the ESP HTTP client supplied instead, so application code
-// selects an exporter exactly as it would upstream:
+// These factories build the same OtlpHttp*Exporter classes upstream provides,
+// with the ESP HTTP client supplied instead of the default one, so
+// application code selects an exporter exactly as it would upstream:
 //
 //   auto exporter  = esp_opentelemetry::MakeOtlpHttpSpanExporter(url);
 //   auto processor = BatchSpanProcessorFactory::Create(std::move(exporter), opts);

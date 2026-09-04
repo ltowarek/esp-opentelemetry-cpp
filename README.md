@@ -115,37 +115,6 @@ is, so the signal's own API is the only thing on screen. The two transport
 examples show every signal at once, because what varies there is the exporter —
 they differ from each other only in which exporter each signal is handed.
 
-## Exporter cost
-
-Measured on the [dust-mite](https://github.com/ltowarek/dust-mite) car firmware
-(ESP32-S3, VGA MJPEG stream over Wi-Fi), comparing the same firmware with no
-telemetry, with the OTLP/HTTP exporters, and with the JTAG exporters. All four
-signals are enabled in the two telemetry arms; the JTAG arm was measured with
-OpenOCD attached and draining the channel, so its writes are not free.
-
-| | no telemetry | OTLP/HTTP | JTAG |
-|---|---:|---:|---:|
-| Application binary | 1.02 MB | 2.57 MB | 2.40 MB |
-| Stream frame rate | 16.65–16.77 fps | 16.78–16.82 fps | 16.47–16.72 fps |
-
-Runtime cost is within measurement noise: the spread across arms
-(16.47–16.82 fps) is inside the run-to-run spread of a single arm. Flash cost
-is substantial: telemetry adds ~1.5 MB, most of it protobuf and the OTLP
-exporter family. The
-JTAG exporters are ~170 KB smaller than OTLP/HTTP, because they reuse the SDK's
-OTLP *file* exporter and skip the HTTP client.
-
-Frame rate here is bandwidth-bound, so it only compares across arms when the
-mean JPEG frame size matches. Arms measured minutes apart under changing light
-produced frame sizes from 15.7 to 32.0 KiB and apparent frame-rate differences
-of 40%, all of it the camera rather than the exporter. The numbers above come
-from flashing prebuilt binaries back to back, and every arm landed within
-31.4–32.0 KiB.
-
-Build time follows the same split: the `otlp` example takes roughly three times
-as long as the `jtag` example from a cold build directory, the OTLP/HTTP
-exporter family being the difference.
-
 ## Workarounds
 
 The `src/workarounds/` subtree contains code that exists purely to paper over upstream deficiencies in third-party libraries or the Xtensa toolchain. Each workaround should be removable once the upstream issue is resolved, and each is tracked by an issue here so the reason survives the code.
@@ -188,7 +157,7 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | Feature | Status | Example |
 |---------|--------|---------|
 | `OStreamSpanExporter` | Tested (QEMU) | [`examples/traces/`](examples/traces/) |
-| `SimpleSpanProcessor` | Linked — `esp_opentelemetry_tracing_setup()` always installs a `BatchSpanProcessor` | — |
+| `SimpleSpanProcessor` | Tested (hardware, ESP32-S3) — via the processor-taking `esp_opentelemetry_tracing_setup()` overload | [`examples/jtag/`](examples/jtag/) |
 | `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | W3C TraceContext propagation (inject) | Tested (hardware) | [`examples/propagation/`](examples/propagation/) |
@@ -205,7 +174,7 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | Observable gauge (`AddCallback`) | Linked | — |
 | `OStreamLogRecordExporter` | Tested (QEMU) | [`examples/logs/`](examples/logs/) |
-| `SimpleLogRecordProcessor` | Linked — `esp_opentelemetry_logs_setup()` always installs a `BatchLogRecordProcessor` | — |
+| `SimpleLogRecordProcessor` | Linked — via the processor-taking `esp_opentelemetry_logs_setup()` overload | — |
 | `BatchLogRecordProcessor` | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | `OtlpHttpLogRecordExporter` (JSON) | Tested (hardware, ESP32-S3; Loki 3.7 / collector 0.156) | [`examples/otlp/`](examples/otlp/) |
 | Log record attributes + `ESP_LOG` call-site capture | Tested (hardware, ESP32-S3 + QEMU) | [`examples/logs/`](examples/logs/) (QEMU), [`examples/otlp/`](examples/otlp/) |

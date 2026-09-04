@@ -18,6 +18,7 @@
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/exporter.h"
+#include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/trace/tracer.h"
 
 #include <memory>
@@ -32,6 +33,20 @@
 // ones, or use any exporter from the SDK.
 void esp_opentelemetry_tracing_setup(
     std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
+
+// Initialise the global tracer provider with the given processor and
+// configure the W3C traceparent propagator. resource_attrs becomes the
+// tracer's resource as-is. Safe to call multiple times; subsequent calls are
+// ignored.
+//
+// Use this overload to install a SimpleSpanProcessor, or any other processor
+// the SDK provides, instead of the BatchSpanProcessor the exporter-taking
+// overload always installs. Unlike that overload, this one does not give the
+// processor a PSRAM export thread stack - only relevant for a processor that
+// spawns one, such as a hand-built BatchSpanProcessor.
+void esp_opentelemetry_tracing_setup(
+    std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor,
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience overload: exports over OTLP/HTTP to

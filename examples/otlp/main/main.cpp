@@ -132,7 +132,7 @@ extern "C" void app_main()
     auto meter   = opentelemetry::metrics::Provider::GetMeterProvider()->GetMeter("otlp-example");
     auto counter = meter->CreateUInt64Counter("iterations", "Loop iterations", "1");
 
-    for (unsigned iteration = 0;; ++iteration) {
+    for (int iteration = 0;; ++iteration) {
         auto parent = tracer->StartSpan("work.iteration");
         parent->SetAttribute("example.type", "otlp");
         parent->SetAttribute("iteration", static_cast<int64_t>(iteration));
@@ -147,7 +147,7 @@ extern "C" void app_main()
         counter->Add(1);
         logger->Info("iteration complete");
 
-        ESP_LOGI(TAG, "emitted iteration %u", iteration);
+        ESP_LOGI(TAG, "emitted iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

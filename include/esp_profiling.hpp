@@ -63,8 +63,7 @@ struct ProfileStack {
   uint8_t span_id[8];
 };
 
-// Install the exporter export_profiles() hands each document to. Called by
-// esp_opentelemetry_profiling_setup().
+// Install the exporter export_profiles() hands each document to.
 void set_profiles_exporter(std::unique_ptr<ProfilesExporter> exporter);
 
 // Build an OpenTelemetry profiles (v1development) ProfilesData document from the
