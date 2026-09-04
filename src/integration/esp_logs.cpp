@@ -16,15 +16,15 @@
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "esp_export_thread.hpp"
-#include "esp_http_client_transport.hpp"
+#if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+#include "esp_otlp_http_exporters.hpp"
+#endif
 
 extern "C" {
 #include "esp_log.h"
 }
 
 #include "opentelemetry/common/key_value_iterable_view.h"
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter.h"
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h"
 #include "opentelemetry/logs/severity.h"
 #include "opentelemetry/sdk/logs/batch_log_record_processor.h"
 #include "opentelemetry/sdk/logs/batch_log_record_processor_options.h"
@@ -56,7 +56,6 @@ constexpr const char* kLoggerVersion = "1.0.0";
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 
-namespace otlp_api = opentelemetry::exporter::otlp;
 namespace sdk_logs = opentelemetry::sdk::logs;
 namespace sdk_res  = opentelemetry::sdk::resource;
 
@@ -98,30 +97,13 @@ struct ReentryGuard {
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
 void esp_opentelemetry_logs_setup(
+    std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter,
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
-  bool expected = false;
-  if (!g_initialised.compare_exchange_strong(expected, true)) {
-    return;
-  }
-
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
-  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL;
-  if (endpoint.empty()) {
-    ESP_LOGW(TAG, "logs base URL is empty; logs disabled.");
+  if (exporter == nullptr) {
+    ESP_LOGW(TAG, "no log record exporter supplied; logs disabled.");
     return;
   }
-
-  otlp_api::OtlpHttpLogRecordExporterOptions opts;
-  opts.url                = endpoint + "/v1/logs";
-  opts.content_type       = otlp_api::HttpRequestContentType::kJson;
-  opts.json_bytes_mapping = otlp_api::JsonBytesMappingKind::kHexId;
-  opts.use_json_name      = false;
-  opts.console_debug      = false;
-  opts.timeout            = std::chrono::seconds(10);
-  opts.compression        = "none";
-  auto exporter = std::unique_ptr<sdk_logs::LogRecordExporter>(
-      new otlp_api::OtlpHttpLogRecordExporter(opts,
-                                              esp_opentelemetry::MakeEspHttpClient()));
 
   sdk_logs::BatchLogRecordProcessorOptions batch_options;
   batch_options.max_queue_size = CONFIG_ESP_OPENTELEMETRY_LOGS_BATCH_MAX_QUEUE_SIZE;
@@ -136,16 +118,55 @@ void esp_opentelemetry_logs_setup(
         new sdk_logs::BatchLogRecordProcessor(std::move(exporter), batch_options));
   }
 
+  esp_opentelemetry_logs_setup(std::move(processor), std::move(resource_attrs));
+#else
+  (void)exporter;
+  (void)resource_attrs;
+#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
+}
+
+void esp_opentelemetry_logs_setup(
+    std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor> processor,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+  if (processor == nullptr) {
+    ESP_LOGW(TAG, "no log record processor supplied; logs disabled.");
+    return;
+  }
+
+  bool expected = false;
+  if (!g_initialised.compare_exchange_strong(expected, true)) {
+    return;
+  }
+
   auto resource = sdk_res::Resource::Create(resource_attrs);
   auto provider = sdk_logs::LoggerProviderFactory::Create(std::move(processor), resource);
   std::shared_ptr<logs_api::LoggerProvider> api_provider = std::move(provider);
   sdk_logs::Provider::SetLoggerProvider(api_provider);
 
-  ESP_LOGI(TAG, "OpenTelemetry logs enabled -> %s", endpoint.c_str());
+  ESP_LOGI(TAG, "OpenTelemetry logs enabled");
 #else
+  (void)processor;
   (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 }
+
+void esp_opentelemetry_logs_setup(
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED) && \
+    defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL;
+  if (endpoint.empty()) {
+    ESP_LOGW(TAG, "logs base URL is empty; logs disabled.");
+    return;
+  }
+  esp_opentelemetry_logs_setup(
+      esp_opentelemetry::MakeOtlpHttpLogRecordExporter(endpoint), resource_attrs);
+#else
+  (void)resource_attrs;
+#endif
+}
+
 
 opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>
 esp_opentelemetry_logger() {

@@ -47,28 +47,24 @@ jobs:
     strategy:
       matrix:
         include:
-          - project: tracing/batch example
-            path: examples/tracing/batch
-          - project: tracing/ostream example
-            path: examples/tracing/ostream
+          - project: traces example
+            path: examples/traces
             qemu: true
-          - project: tracing/propagation example
-            path: examples/tracing/propagation
-          - project: metrics/ostream example
-            path: examples/metrics/ostream
+          - project: metrics example
+            path: examples/metrics
             qemu: true
-          - project: metrics/otlp example
-            path: examples/metrics/otlp
-          - project: logs/ostream example
-            path: examples/logs/ostream
+          - project: logs example
+            path: examples/logs
             qemu: true
-          - project: logs/otlp example
-            path: examples/logs/otlp
-          - project: profiling/serial example
-            path: examples/profiling/serial
+          - project: profiles example
+            path: examples/profiles
             qemu: true
-          - project: profiling/otlp example
-            path: examples/profiling/otlp
+          - project: otlp example
+            path: examples/otlp
+          - project: jtag example
+            path: examples/jtag
+          - project: propagation example
+            path: examples/propagation
 
     container:
       image: ghcr.io/ltowarek/esp-opentelemetry-cpp-devcontainer

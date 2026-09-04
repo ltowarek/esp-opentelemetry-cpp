@@ -17,12 +17,41 @@
 
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/trace/exporter.h"
+#include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/trace/tracer.h"
 
-// Initialise the global tracer provider, configure the W3C traceparent
-// propagator, and wire up an OTLP/HTTP exporter backed by esp_http_client.
-// resource_attrs becomes the tracer's resource as-is. Safe to call
-// multiple times; subsequent calls are ignored.
+#include <memory>
+
+// Initialise the global tracer provider with the given exporter, wrap it in a
+// BatchSpanProcessor whose export thread gets a PSRAM stack, and configure the
+// W3C traceparent propagator. resource_attrs becomes the tracer's resource
+// as-is. Safe to call multiple times; subsequent calls are ignored.
+//
+// The exporter is the caller's choice, as it is upstream — see
+// esp_otlp_http_exporters.hpp and esp_jtag_exporters.hpp for the ESP-specific
+// ones, or use any exporter from the SDK.
+void esp_opentelemetry_tracing_setup(
+    std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
+
+// Initialise the global tracer provider with the given processor and
+// configure the W3C traceparent propagator. resource_attrs becomes the
+// tracer's resource as-is. Safe to call multiple times; subsequent calls are
+// ignored.
+//
+// Use this overload to install a SimpleSpanProcessor, or any other processor
+// the SDK provides, instead of the BatchSpanProcessor the exporter-taking
+// overload always installs. Unlike that overload, this one does not give the
+// processor a PSRAM export thread stack - only relevant for a processor that
+// spawns one, such as a hand-built BatchSpanProcessor.
+void esp_opentelemetry_tracing_setup(
+    std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor,
+    opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
+
+// Convenience overload: exports over OTLP/HTTP to
+// CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL. Does nothing when that URL
+// is empty. Equivalent to passing MakeOtlpHttpSpanExporter(that URL).
 void esp_opentelemetry_tracing_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 

@@ -1,0 +1,34 @@
+# Workaround: give protobuf's `pb_defaults` input section a home.
+#
+# protobuf places `dummy_weak_default` in a `pb_defaults` section whenever
+# PROTOBUF_DESCRIPTOR_WEAK_MESSAGES_ALLOWED is defined (port_def.inc guards it
+# on __clang__, so only a clang build emits it). ESP-IDF's link script places
+# no such section, and IDF v6 rejects orphan sections outright, so the
+# executable fails to link.
+#
+# ldgen rewrites sections.ld with this mapping, which both GNU ld and lld then
+# read as an ordinary script - unlike an INSERT fragment, which GNU ld does not
+# resolve against a script passed with -T. Builds that never emit the section
+# match nothing and are unaffected.
+#
+# Merging into flash_rodata means no output section is named `pb_defaults`, so
+# the linker synthesises no __start_/__stop_ pair; CMakeLists.txt defines both
+# as 0. That leaves protobuf's InitWeakDefaults() with an empty range to walk,
+# which is a no-op. Sound only because nothing here generates code with
+# --descriptor_implicit_weak_messages, so the section never holds a real
+# default instance - just protobuf's own dummy entry.
+#
+# Upstream: ltowarek/esp-opentelemetry-cpp#94.
+
+[sections:pb_defaults]
+entries:
+    pb_defaults
+
+[scheme:pb_defaults_flash]
+entries:
+    pb_defaults -> flash_rodata
+
+[mapping:pb_defaults]
+archive: *
+entries:
+    * (pb_defaults_flash)

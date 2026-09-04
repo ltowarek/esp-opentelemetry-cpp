@@ -5,6 +5,9 @@
 
 #include "esp_profiling.hpp"
 
+void esp_opentelemetry_profiling_setup(
+    std::unique_ptr<esp_opentelemetry::ProfilesExporter>) {}
+
 void esp_opentelemetry_profiling_setup() {}
 
 uint32_t esp_opentelemetry_profiling_samples() { return 0; }
