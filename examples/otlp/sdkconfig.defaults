@@ -1,0 +1,43 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MODE_OCT=y
+
+# OpenTelemetry + its protobuf/Abseil dependencies blow past the stock
+# "single app large" 1.5 MB factory partition. Grow flash to 4 MB and switch to
+# a custom layout with a ~3.25 MB factory slot.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# Every signal with an OTLP/HTTP exporter. Each needs its own base URL; the
+# metrics one points at a Mimir-style OTLP endpoint and profiles at the
+# symbolizer, so the three differ.
+CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=y
+CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="otlp-example"
+CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL=""
+CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL=""
+CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL=""
+CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL=""
+
+# The Batch processors and the metric reader each spawn a pthread that
+# serialises to protobuf and POSTs over HTTP; 3 KB (the IDF default) is far too
+# small for that.
+CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=32768
+
+CONFIG_WIFI_SSID=""
+CONFIG_WIFI_PASSWORD=""
+
+CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
+
+# Profiles are sampled and exported by esp_opentelemetry_profiling_setup(); the
+# per-task span slot it uses needs a second TLS pointer.
+CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2

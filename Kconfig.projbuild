@@ -19,13 +19,78 @@ menu "OpenTelemetry"
             Stamped as service_root_path on profiles only. Empty omits the
             attribute.
 
+    menu "Exporters to compile in"
+        comment "Which exporter implementations are available to the application."
+
+    config ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        bool "OTLP/HTTP exporters"
+        default y
+        help
+            Compiles esp_opentelemetry::MakeOtlpHttp*Exporter(), which POST
+            OTLP/JSON to a collector through esp_http_client. Pulls in the
+            SDK's OTLP/HTTP exporter family.
+
+    config ESP_OPENTELEMETRY_EXPORTER_OSTREAM
+        bool "Console (ostream) exporters"
+        default n
+        help
+            Compiles the SDK's ostream exporters, which print each signal to
+            stdout. Useful for bring-up and QEMU runs; the output is
+            human-readable rather than OTLP, so nothing forwards it.
+
+    config ESP_OPENTELEMETRY_EXPORTER_JTAG
+        bool "JTAG app-trace exporters"
+        depends on ESP_TRACE_TRANSPORT_APPTRACE
+        depends on APPTRACE_DEST_JTAG || APPTRACE_DEST_ALL
+        default n
+        help
+            Compiles esp_opentelemetry::Jtag*Exporter, which write OTLP/JSON -
+            one document per line, the same encoding the OTLP/HTTP exporters
+            send - to the ESP-IDF app-trace channel, with no network involved.
+            A host-side reader (OpenOCD's "esp apptrace start" feeding Vector
+            or Fluent Bit) forwards the lines to a collector. Every signal
+            shares the one channel, one whole document at a time.
+
+            Requires the app-trace transport with a destination that compiles
+            the JTAG interface, both under "ESP Trace Configuration";
+            APPTRACE_DEST_JTAG in turn requires power management to be off.
+            See examples/jtag.
+
+    config ESP_OPENTELEMETRY_JTAG_TIMEOUT_US
+        int "app-trace write timeout (us)"
+        depends on ESP_OPENTELEMETRY_EXPORTER_JTAG
+        default 100000
+        range 0 10000000
+        help
+            How long a single app-trace write may block the exporting task
+            waiting for a connected host to drain the pending block; the
+            document is dropped once it expires. With no host connected
+            app-trace recycles buffers without waiting, so writes return
+            immediately and this value does not apply. It also caps
+            ForceFlush/Shutdown, whose SDK default of "no timeout" would
+            otherwise wait forever. 0 never blocks, at the cost of dropping
+            documents whenever a buffer swap is in flight.
+
+    config ESP_OPENTELEMETRY_JTAG_CHUNK_SIZE
+        int "app-trace write chunk size (bytes)"
+        depends on ESP_OPENTELEMETRY_EXPORTER_JTAG
+        default 256
+        range 64 4096
+        help
+            An OTLP/JSON document is larger than the app-trace buffer, so it is
+            written in chunks of this size. Larger chunks cost fewer calls;
+            smaller ones fit more easily into the space left in a partially
+            filled buffer.
+
+    endmenu
+
     config ESP_OPENTELEMETRY_TRACING_ENABLED
         bool "Enable OpenTelemetry tracing"
         default n
 
     config ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL
         string "Tracing OTLP base URL (e.g. http://192.168.1.10:4318)"
-        depends on ESP_OPENTELEMETRY_TRACING_ENABLED
+        depends on ESP_OPENTELEMETRY_TRACING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP trace export. The path "/v1/traces" is
@@ -104,7 +169,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL
         string "Profiles OTLP/HTTP endpoint (the profiling-symbolizer)"
-        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
+        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL of the profiling-symbolizer; "/v1development/profiles" is
@@ -124,14 +189,6 @@ menu "OpenTelemetry"
             samples. The default follows the Grafana span-profiles convention
             (Tempo's "Profiles for this span" flame graph); other backends may
             use a different key. Set empty to disable stamping.
-
-    config ESP_OPENTELEMETRY_PROFILES_DEBUG_JSON
-        bool "Log the profiles JSON document on each export"
-        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED
-        default n
-        help
-            Prints each exported ProfilesData JSON between PROFILE_JSON_BEGIN /
-            PROFILE_JSON_END markers for capture/replay validation. Noisy.
 
     config ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE
         int "Max queued spans before drop"
@@ -155,7 +212,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL
         string "Logs OTLP base URL"
-        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP log export. The path "/v1/logs" is
@@ -205,7 +262,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL
         string "Metrics OTLP base URL"
-        depends on ESP_OPENTELEMETRY_METRICS_ENABLED
+        depends on ESP_OPENTELEMETRY_METRICS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is

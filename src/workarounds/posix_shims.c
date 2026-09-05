@@ -14,6 +14,8 @@
 // by `vTaskDelay()`. It is a weak symbol so any future ESP-IDF release
 // that ships the real thing wins.
 
+#include "sdkconfig.h"
+
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -122,3 +124,24 @@ long __wrap_sysconf(int name) {
   return __real_sysconf(name);
 }
 
+
+// ESP-IDF's libc has no linkat(): there is no VFS operation behind it. The
+// OTLP file exporter's rotation code (OtlpFileSystemBackend::OpenLogFile)
+// calls it to maintain the "latest file" alias, and lives in the same
+// translation unit as OtlpFileClient, so it is linked in even by builds that
+// only use a custom OtlpFileAppender — the JTAG span exporter's case.
+// Returning ENOSYS is what the unreachable rotation path would see anyway.
+#if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+#include <fcntl.h>
+__attribute__((weak))
+int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath,
+           int flags) {
+  (void)olddirfd;
+  (void)oldpath;
+  (void)newdirfd;
+  (void)newpath;
+  (void)flags;
+  errno = ENOSYS;
+  return -1;
+}
+#endif  // CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG

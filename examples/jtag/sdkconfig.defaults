@@ -1,0 +1,36 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+CONFIG_FREERTOS_HZ=1000
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MODE_OCT=y
+
+# OpenTelemetry + its protobuf/Abseil dependencies blow past the stock
+# "single app large" 1.5 MB factory partition. Grow flash to 4 MB and switch to
+# a custom layout with a ~3.25 MB factory slot.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# The app-trace channel over JTAG. APPTRACE_DEST_JTAG is the default once the
+# app-trace transport is selected, but is spelled out here because
+# ESP_OPENTELEMETRY_EXPORTER_JTAG is not selectable without it.
+CONFIG_ESP_TRACE_TRANSPORT_APPTRACE=y
+CONFIG_APPTRACE_DEST_JTAG=y
+
+# Every signal, each with a JTAG exporter. The OTLP/HTTP exporters are not
+# compiled in, so their base URLs do not appear at all.
+CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=y
+CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n
+CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
+CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="jtag-example"
+
+# Profiles are sampled and exported by esp_opentelemetry_profiling_setup(); the
+# per-task span slot it uses needs a second TLS pointer.
+CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2
