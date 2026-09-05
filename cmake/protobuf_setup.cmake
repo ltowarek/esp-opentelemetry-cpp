@@ -1,7 +1,8 @@
-# Shared setup that materializes the target-side libprotobuf + Abseil and
-# the host-side protoc for code generation. Intended to be include()d from
-# CMakeLists.txt before calling add_subdirectory(opentelemetry-cpp) (which
-# resolves find_package(Protobuf) at configure time).
+# Shared setup that materializes the target-side libprotobuf + Abseil.
+# Intended to be include()d from CMakeLists.txt before calling
+# add_subdirectory(opentelemetry-cpp) (which resolves find_package(Protobuf)
+# at configure time). protoc itself is expected on PATH; upstream's
+# protobuf.cmake resolves it via find_program() under CMAKE_CROSSCOMPILING.
 #
 # The guard below makes the setup idempotent: the first include() does the
 # real work; subsequent include()s short-circuit.
@@ -35,71 +36,10 @@ set(THREADS_PREFER_PTHREAD_FLAG FALSE  CACHE INTERNAL "")
 set(PROTOBUF_THIRD_PARTY "${CMAKE_CURRENT_LIST_DIR}/../third_party")
 set(PROTOBUF_SRC_DIR     "${PROTOBUF_THIRD_PARTY}/protobuf")
 set(ABSL_SRC_DIR         "${PROTOBUF_THIRD_PARTY}/abseil-cpp")
-set(PROTOBUF_VERSION     "34.1.0")
+set(PROTOBUF_VERSION     "36.0.0")
 
 # -----------------------------------------------------------------------------
-# 1. Host protoc build
-# -----------------------------------------------------------------------------
-set(HOST_BUILD_DIR   "${CMAKE_BINARY_DIR}/_deps/host_protobuf-build")
-set(HOST_INSTALL_DIR "${CMAKE_BINARY_DIR}/_deps/host_protobuf-install")
-set(PROTOBUF_HOST_PROTOC "${HOST_INSTALL_DIR}/bin/protoc")
-
-if(NOT EXISTS "${PROTOBUF_HOST_PROTOC}")
-    message(STATUS "Building host protoc from ${PROTOBUF_SRC_DIR} (v${PROTOBUF_VERSION})")
-    file(MAKE_DIRECTORY "${HOST_BUILD_DIR}")
-
-    # Use only the host toolchain. We explicitly scrub the CMake toolchain
-    # variables IDF exported for the Xtensa cross-compile; otherwise the
-    # host configure would try to build protoc with the Xtensa GCC.
-    execute_process(
-        COMMAND ${CMAKE_COMMAND}
-            -S "${CMAKE_CURRENT_LIST_DIR}/host_build"
-            -B "${HOST_BUILD_DIR}"
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX=${HOST_INSTALL_DIR}
-            -DCMAKE_C_COMPILER=cc
-            -DCMAKE_CXX_COMPILER=c++
-            -DCMAKE_TOOLCHAIN_FILE=
-            -DCMAKE_SYSTEM_NAME=
-            -DCMAKE_SYSTEM_PROCESSOR=
-            -DABSL_SRC=${ABSL_SRC_DIR}
-            -DPROTOBUF_SRC=${PROTOBUF_SRC_DIR}
-        RESULT_VARIABLE _host_cfg_rc
-        OUTPUT_VARIABLE _host_cfg_out
-        ERROR_VARIABLE  _host_cfg_err
-    )
-    if(NOT _host_cfg_rc EQUAL 0)
-        message(FATAL_ERROR
-            "Host protoc configure failed (rc=${_host_cfg_rc}):\n"
-            "STDOUT:\n${_host_cfg_out}\n"
-            "STDERR:\n${_host_cfg_err}")
-    endif()
-
-    # Cap parallelism. A full libprotobuf + Abseil build + linking protoc
-    # runs into tens of GB of RSS if every core is spawned; we have seen
-    # host freezes (mouse unresponsive, clock stopped) on 4-core/7.7 GB
-    # dev hosts with stock swap. Three jobs keeps the peak working set
-    # below the OOM threshold while still using most of the CPU.
-    execute_process(
-        COMMAND ${CMAKE_COMMAND} --build "${HOST_BUILD_DIR}"
-                                 --target install
-                                 --config Release
-                                 --parallel 3
-        RESULT_VARIABLE _host_build_rc
-    )
-    if(NOT _host_build_rc EQUAL 0)
-        message(FATAL_ERROR "Host protoc build failed (rc=${_host_build_rc})")
-    endif()
-
-    if(NOT EXISTS "${PROTOBUF_HOST_PROTOC}")
-        message(FATAL_ERROR
-            "Host protoc build reported success but ${PROTOBUF_HOST_PROTOC} is missing")
-    endif()
-    message(STATUS "Host protoc built at ${PROTOBUF_HOST_PROTOC}")
-endif()
-
-# -----------------------------------------------------------------------------
-# 2. Target (Xtensa) libprotobuf + Abseil
+# 1. Target (Xtensa) libprotobuf + Abseil
 # -----------------------------------------------------------------------------
 # opentelemetry-cpp and Abseil both look at CMAKE_SYSTEM_PROCESSOR.
 # The IDF toolchain leaves it empty or set to "xtensa"; neither Abseil
@@ -304,23 +244,8 @@ foreach(_pb_target libprotobuf libprotobuf-lite utf8_range utf8_validity)
 endforeach()
 
 # -----------------------------------------------------------------------------
-# 3. Expose protoc to downstream find_package(Protobuf) calls
+# 2. Expose a Protobuf package-config to downstream find_package(Protobuf) calls
 # -----------------------------------------------------------------------------
-# protobuf's target-build does not create the protobuf::protoc imported
-# target because protobuf_BUILD_PROTOC_BINARIES is OFF. opentelemetry-cpp
-# consults $<TARGET_FILE:protobuf::protoc> or Protobuf_PROTOC_EXECUTABLE
-# (cross-compile path). Provide both.
-if(NOT TARGET protobuf::protoc)
-    add_executable(protobuf::protoc IMPORTED GLOBAL)
-    set_target_properties(protobuf::protoc PROPERTIES
-        IMPORTED_LOCATION "${PROTOBUF_HOST_PROTOC}")
-endif()
-
-set(Protobuf_PROTOC_EXECUTABLE "${PROTOBUF_HOST_PROTOC}"
-    CACHE FILEPATH "Path to host protoc binary" FORCE)
-set(PROTOBUF_PROTOC_EXECUTABLE "${PROTOBUF_HOST_PROTOC}"
-    CACHE FILEPATH "Path to host protoc binary" FORCE)
-
 # Synthesize a package-config so downstream find_package(Protobuf CONFIG)
 # calls succeed — no network, no apt. We intentionally do not rely on
 # protobuf's own install step because that expands into a sprawling

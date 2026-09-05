@@ -7,14 +7,15 @@
 # install tree in).
 #
 # The actual targets (protobuf::libprotobuf, protobuf::libprotobuf-lite,
-# protobuf::protoc, utf8_range::utf8_range, utf8_range::utf8_validity)
-# and the Abseil targets are declared globally by the add_subdirectory()
-# calls in cmake/protobuf_setup.cmake, so we only need to publish the
-# find_package result variables here.
+# utf8_range::utf8_range, utf8_range::utf8_validity) and the Abseil targets
+# are declared globally by the add_subdirectory() calls in
+# cmake/protobuf_setup.cmake, so we only need to publish the find_package
+# result variables here. protoc itself is resolved from PATH by upstream's
+# find_program(Protobuf_PROTOC_EXECUTABLE protoc) under CMAKE_CROSSCOMPILING,
+# so this config must not pre-set either protoc result variable — doing so
+# would make that find_program() a no-op.
 
 set(Protobuf_FOUND              TRUE)
 set(Protobuf_VERSION            "@PROTOBUF_VERSION@")
 set(Protobuf_INCLUDE_DIR        "@PROTOBUF_INCLUDE_DIR@")
 set(Protobuf_INCLUDE_DIRS       "@PROTOBUF_INCLUDE_DIR@")
-set(Protobuf_PROTOC_EXECUTABLE  "@PROTOBUF_HOST_PROTOC@")
-set(PROTOBUF_PROTOC_EXECUTABLE  "@PROTOBUF_HOST_PROTOC@")
