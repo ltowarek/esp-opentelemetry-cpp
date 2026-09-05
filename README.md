@@ -90,6 +90,11 @@ a 4 MB part you do not want to carry the ones you will not call:
 | Console | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM` | The SDK's own ostream exporters; runs under QEMU |
 | JTAG app-trace | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` | `esp_opentelemetry::Jtag*Exporter` — one OTLP/JSON document per line on the app-trace channel, relayed by a host-side forwarder; no network |
 
+OTLP/HTTP and JTAG both serialise through protobuf-generated OTLP types, so
+libprotobuf and Abseil (~30 targets) are only built when at least one of the
+two is selected. A console-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
+`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`.
+
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
 an OTLP/HTTP exporter from that signal's `..._OTLP_BASE_URL`, which is what a
 firmware that only ever exports over Wi-Fi wants.

@@ -9,9 +9,11 @@
 # through the header-only opentelemetry-cpp api/ tree, and every tracer
 # call routes to the SDK's built-in no-op provider.
 #
-# When enabled, the full C++ SDK including the OTLP/HTTP exporter is
-# compiled in. Protobuf and Abseil are vendored as submodules under
-# third_party/ and built as part of this component.
+# When enabled, the full C++ SDK is compiled in. Protobuf and Abseil are
+# vendored as submodules under third_party/ and are only built as part of
+# this component when CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP or
+# CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG selects an exporter family that
+# needs them (see WITH_OTLP_HTTP / WITH_OTLP_FILE below).
 
 set(ESP_OPENTELEMETRY_SRCS
     src/integration/esp_git_ref.cpp
@@ -154,17 +156,29 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     set(WITH_OTLP_GRPC        OFF CACHE BOOL "" FORCE)
     # The JTAG exporters reuse the OTLP file exporters' OTLP/JSON serialisation
     # with an app-trace appender in place of a file, so each of this
-    # component's exporter families maps onto one of the SDK's. The rest of
-    # this file assumes protobuf is materialised (protobuf_setup.cmake, the
-    # int32_t override, the INTERFACE libprotobuf link), so OTLP/HTTP stays on
-    # even for an ostream-only build; dropping protobuf when no OTLP exporter
-    # is compiled is issue #38.
+    # component's exporter families maps onto one of the SDK's.
     if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
         set(WITH_OTLP_FILE    ON  CACHE BOOL "" FORCE)
     else()
         set(WITH_OTLP_FILE    OFF CACHE BOOL "" FORCE)
     endif()
-    set(WITH_OTLP_HTTP        ON  CACHE BOOL "" FORCE)
+    if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
+        set(WITH_OTLP_HTTP    ON  CACHE BOOL "" FORCE)
+    else()
+        set(WITH_OTLP_HTTP    OFF CACHE BOOL "" FORCE)
+    endif()
+    # opentelemetry-cpp's own CMakeLists only pulls in protobuf when one of
+    # WITH_OTLP_GRPC/HTTP/FILE is set (WITH_OTLP_GRPC is always off here), so
+    # this mirrors that same condition: materialise protobuf + Abseil only
+    # when an exporter family that needs them is selected (issue #38).
+    # Plain set(), not CACHE BOOL FORCE like the WITH_* flags above: this is
+    # derived from them within the same configure run, not read by any
+    # add_subdirectory()'s option() calls, so it has nothing to override.
+    if(WITH_OTLP_HTTP OR WITH_OTLP_FILE)
+        set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF ON)
+    else()
+        set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF OFF)
+    endif()
     set(WITH_PROMETHEUS       OFF CACHE BOOL "" FORCE)
     set(WITH_ZIPKIN           OFF CACHE BOOL "" FORCE)
     set(WITH_ELASTICSEARCH    OFF CACHE BOOL "" FORCE)
@@ -182,11 +196,18 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     set(WITH_HTTP_CLIENT_CURL OFF CACHE BOOL "" FORCE)
 
     # Materialize Abseil + libprotobuf + the synthesized Protobuf package
-    # config *before* opentelemetry-cpp's CMake runs. Without this, the
+    # config *before* opentelemetry-cpp's CMake runs, but only when an
+    # exporter family that needs them is selected. Without this, the
     # SDK's cmake/protobuf.cmake would fall through to FetchContent and
     # create a duplicate libprotobuf target. The include is guarded
-    # inside the .cmake file so calling it again is a no-op.
-    include(${CMAKE_CURRENT_LIST_DIR}/cmake/protobuf_setup.cmake)
+    # inside the .cmake file so calling it again is a no-op. When neither
+    # OTLP/HTTP nor JTAG is selected, WITH_OTLP_HTTP/WITH_OTLP_FILE are both
+    # off and the SDK's own CMakeLists never looks for protobuf either, so
+    # skipping this include is what actually keeps protobuf + Abseil out of
+    # the build (issue #38).
+    if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
+        include(${CMAKE_CURRENT_LIST_DIR}/cmake/protobuf_setup.cmake)
+    endif()
 
     add_subdirectory(
         ${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp
@@ -194,31 +215,33 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         EXCLUDE_FROM_ALL
     )
 
-    # Same int32_t-as-long fix the protobuf setup applies to Abseil
-    # and libprotobuf. opentelemetry-cpp instantiates RepeatedField<int>
-    # / Set<int> the same way protobuf internals do, so pin its
-    # int32_t to `int` for every vendored target.
-    _esp_opentelemetry_apply_int_override(
-        ${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp)
+    if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
+        # Same int32_t-as-long fix the protobuf setup applies to Abseil
+        # and libprotobuf. opentelemetry-cpp instantiates RepeatedField<int>
+        # / Set<int> the same way protobuf internals do, so pin its
+        # int32_t to `int` for every vendored target.
+        _esp_opentelemetry_apply_int_override(
+            ${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp)
 
-    # Target-level .pb.cc files produced by opentelemetry-proto at
-    # configure time use the generated google/protobuf/*.pb.h that
-    # ship in the protobuf source tree.  They need to see our vendored
-    # protobuf headers *and* our Abseil headers without the build system
-    # having to re-derive the include paths per translation unit, so
-    # route them through protobuf::libprotobuf (already built by
-    # cmake/protobuf_setup.cmake).
-    target_include_directories(${COMPONENT_LIB} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/third_party/protobuf/src"
-        "${CMAKE_CURRENT_LIST_DIR}/third_party/abseil-cpp")
+        # Target-level .pb.cc files produced by opentelemetry-proto at
+        # configure time use the generated google/protobuf/*.pb.h that
+        # ship in the protobuf source tree.  They need to see our vendored
+        # protobuf headers *and* our Abseil headers without the build system
+        # having to re-derive the include paths per translation unit, so
+        # route them through protobuf::libprotobuf (already built by
+        # cmake/protobuf_setup.cmake).
+        target_include_directories(${COMPONENT_LIB} PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/third_party/protobuf/src"
+            "${CMAKE_CURRENT_LIST_DIR}/third_party/abseil-cpp")
 
-    # The component's own C++ TUs pull opentelemetry-cpp + protobuf headers that
-    # transitively include absl/base/internal/thread_identity.h, whose
-    # unconditional lock-free static_assert fails on some ESP toolchain configs.
-    # Prepend the dedicated absl_shadow include dir so our thread_identity.h
-    # shadow wins over Abseil's own -I (see cmake/protobuf_setup.cmake).
-    target_include_directories(${COMPONENT_LIB} BEFORE PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/src/workarounds/absl_shadow")
+        # The component's own C++ TUs pull opentelemetry-cpp + protobuf headers that
+        # transitively include absl/base/internal/thread_identity.h, whose
+        # unconditional lock-free static_assert fails on some ESP toolchain configs.
+        # Prepend the dedicated absl_shadow include dir so our thread_identity.h
+        # shadow wins over Abseil's own -I (see cmake/protobuf_setup.cmake).
+        target_include_directories(${COMPONENT_LIB} BEFORE PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/src/workarounds/absl_shadow")
+    endif()
 
     # Each signal links its SDK plus the exporter for the selected transport;
     # the unselected transport's exporter is never built into the image.
@@ -261,7 +284,8 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         endif()
     endif()
 
-    target_link_libraries(${COMPONENT_LIB}
-        PUBLIC opentelemetry_common
-        INTERFACE protobuf::libprotobuf)
+    target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_common)
+    if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
+        target_link_libraries(${COMPONENT_LIB} INTERFACE protobuf::libprotobuf)
+    endif()
 endif()
