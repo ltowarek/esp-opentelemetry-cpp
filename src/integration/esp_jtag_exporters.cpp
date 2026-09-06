@@ -5,6 +5,7 @@
 #include "esp_jtag_channel.hpp"
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
+#include "esp_otlp_json_backends.hpp"
 #include "opentelemetry/exporters/otlp/otlp_file_client_options.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #endif
@@ -77,8 +78,8 @@ Options AppTraceOptions() {
 
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter() {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-  return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
-      new otlp_api::OtlpFileExporter(AppTraceOptions<otlp_api::OtlpFileExporterOptions>()));
+  return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new otlp_api::OtlpFileExporter(
+      AppTraceOptions<otlp_api::OtlpFileExporterOptions>(), CjsonJsonWriterFactory()));
 #else
   return nullptr;
 #endif
@@ -88,7 +89,8 @@ std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordEx
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpFileLogRecordExporter(
-          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>()));
+          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>(),
+          CjsonJsonWriterFactory()));
 #else
   return nullptr;
 #endif
@@ -121,7 +123,7 @@ std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricE
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
   return std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>(
       new otlp_api::OtlpFileMetricExporter(
-          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>()));
+          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>(), CjsonJsonWriterFactory()));
 #else
   return nullptr;
 #endif

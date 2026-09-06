@@ -1,0 +1,10 @@
+# Comparison build: same firmware, OTLP/HTTP serialized through protobuf.
+#
+#   idf.py -B build_protobuf \
+#          -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.protobuf" \
+#          -D SDKCONFIG=build_protobuf/sdkconfig build
+#
+# The wire bytes are unchanged; what differs is that libprotobuf and Abseil are
+# compiled and linked, which tools/check_no_protobuf.sh then reports on.
+CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_JSON=n
+CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF=y

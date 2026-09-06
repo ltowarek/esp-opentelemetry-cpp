@@ -4,6 +4,7 @@
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
 #include "esp_http_client_transport.hpp"
+#include "esp_otlp_json_backends.hpp"
 #endif
 
 extern "C" {
@@ -15,16 +16,28 @@ extern "C" {
 #include <utility>
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-#include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+#include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
+#else
+#include "opentelemetry/exporters/otlp/otlp_json_http_exporter.h"
+#endif
 #endif
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter.h"
 #include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h"
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter.h"
+#else
+#include "opentelemetry/exporters/otlp/otlp_json_http_log_record_exporter.h"
+#endif
 #endif
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
-#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+#include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
+#else
+#include "opentelemetry/exporters/otlp/otlp_json_http_metric_exporter_factory.h"
+#endif
 #endif
 
 namespace esp_opentelemetry {
@@ -37,7 +50,10 @@ namespace otlp_api = opentelemetry::exporter::otlp;
 
 // JSON with hex trace/span ids, matching what the collector's OTLP/HTTP
 // receiver expects and what the JTAG exporters emit, so the wire form does not
-// change with the exporter.
+// change with the exporter. The three serialization fields are what the
+// protobuf path needs to be told; the OTLP/JSON exporters emit exactly this
+// encoding by construction and ignore them, so they are set unconditionally
+// rather than per encoding.
 template <typename Options>
 void ApplyCommon(Options& options, const std::string& url) {
   options.url                = url;
@@ -58,8 +74,16 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporte
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   otlp_api::OtlpHttpExporterOptions options;
   ApplyCommon(options, base_url + "/v1/traces");
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
-      new otlp_api::OtlpHttpExporter(options, MakeEspHttpClient()));
+      new otlp_api::OtlpHttpExporter(options, otlp_api::OtlpHttpExporterRuntimeOptions(),
+                                     MakeEspHttpClient(), CjsonJsonWriterFactory()));
+#else
+  return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
+      new otlp_api::OtlpJsonHttpExporter(
+          options, otlp_api::OtlpHttpExporterRuntimeOptions(), MakeEspHttpClient(),
+          CjsonJsonWriterFactory(), CjsonJsonReaderFactory()));
+#endif
 #else
   return nullptr;
 #endif
@@ -70,8 +94,17 @@ MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   otlp_api::OtlpHttpLogRecordExporterOptions options;
   ApplyCommon(options, base_url + "/v1/logs");
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
-      new otlp_api::OtlpHttpLogRecordExporter(options, MakeEspHttpClient()));
+      new otlp_api::OtlpHttpLogRecordExporter(
+          options, otlp_api::OtlpHttpLogRecordExporterRuntimeOptions(),
+          MakeEspHttpClient(), CjsonJsonWriterFactory()));
+#else
+  return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
+      new otlp_api::OtlpJsonHttpLogRecordExporter(
+          options, otlp_api::OtlpHttpLogRecordExporterRuntimeOptions(),
+          MakeEspHttpClient(), CjsonJsonWriterFactory(), CjsonJsonReaderFactory()));
+#endif
 #else
   return nullptr;
 #endif
@@ -82,7 +115,15 @@ MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& base_url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
   otlp_api::OtlpHttpMetricExporterOptions options;
   ApplyCommon(options, base_url + "/v1/metrics");
-  return otlp_api::OtlpHttpMetricExporterFactory::Create(options, MakeEspHttpClient());
+#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+  return otlp_api::OtlpHttpMetricExporterFactory::Create(
+      options, otlp_api::OtlpHttpMetricExporterRuntimeOptions(), MakeEspHttpClient(),
+      CjsonJsonWriterFactory());
+#else
+  return otlp_api::OtlpJsonHttpMetricExporterFactory::Create(
+      options, otlp_api::OtlpHttpMetricExporterRuntimeOptions(), MakeEspHttpClient(),
+      CjsonJsonWriterFactory(), CjsonJsonReaderFactory());
+#endif
 #else
   return nullptr;
 #endif
