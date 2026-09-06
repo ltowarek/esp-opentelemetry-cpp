@@ -27,14 +27,14 @@ namespace esp_opentelemetry {
 
 namespace {
 
-constexpr const char* kTag = "esp_otel_json_writer";
+constexpr const char* TAG = "esp_otel_json_writer";
 
 // RFC 4648 base64 with padding, matching the "AAEC/w==" shape the interface
 // contract requires of WriteBytes. cJSON has no encoder of its own to reuse
 // here: unlike WriteString/WriteInt32/etc., where cJSON's own string
 // escaping and number formatting can be trusted directly, bytes-as-base64
 // is a mapping decision the writer itself must make.
-std::string Base64Encode(const std::uint8_t* data, std::size_t size) {
+std::string base64_encode(const std::uint8_t* data, std::size_t size) {
   static const char kAlphabet[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   std::string out;
@@ -134,7 +134,7 @@ class CjsonJsonWriter final : public JsonWriter {
   }
 
   void WriteBytes(const std::uint8_t* data, std::size_t size) noexcept override {
-    const std::string encoded = Base64Encode(data, size);
+    const std::string encoded = base64_encode(data, size);
     WriteValue([&encoded] { return cJSON_CreateString(encoded.c_str()); });
   }
 
@@ -189,8 +189,12 @@ class CjsonJsonWriter final : public JsonWriter {
       Fail("failed to allocate a JSON container");
       return;
     }
-    Attach(item);
-    stack_.push_back(Frame{item, kind});
+    // Attach() may free `item` on failure (e.g. cJSON_AddItemToObject running
+    // out of memory duplicating the key), so the stack must never see it
+    // unless the attach actually succeeded.
+    if (Attach(item)) {
+      stack_.push_back(Frame{item, kind});
+    }
   }
 
   // Validates that a value may be written next (root not already set /
@@ -224,10 +228,12 @@ class CjsonJsonWriter final : public JsonWriter {
   // Attaches an already-created item at the point ClaimSlot() just
   // validated. Must be called immediately after a successful ClaimSlot(),
   // with no intervening call that could change pending_key_ or the stack.
-  void Attach(cJSON* item) noexcept {
+  // Returns whether the item is now reachable from the document: false means
+  // it has already been deleted and the caller must not keep the pointer.
+  bool Attach(cJSON* item) noexcept {
     if (stack_.empty()) {
       root_ = item;
-      return;
+      return true;
     }
     Frame& frame = stack_.back();
     const cJSON_bool added = (frame.kind == Container::kArray)
@@ -236,7 +242,9 @@ class CjsonJsonWriter final : public JsonWriter {
     if (!added) {
       cJSON_Delete(item);
       Fail("failed to attach a JSON value to its container");
+      return false;
     }
+    return true;
   }
 
   void CloseContainer(Container kind) noexcept {
@@ -259,7 +267,7 @@ class CjsonJsonWriter final : public JsonWriter {
       return;
     }
     ok_ = false;
-    ESP_LOGE(kTag, "%s", reason);
+    ESP_LOGE(TAG, "%s", reason);
   }
 
   cJSON* root_ = nullptr;

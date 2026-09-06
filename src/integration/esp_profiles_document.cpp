@@ -14,8 +14,8 @@
 // the way a cJSON subtree can. The dictionary tables (string/location/
 // attribute) and the per-sample stack/attribute indices are all discovered
 // while walking `stacks`, but `dictionary` is emitted after `resourceProfiles`
-// in the wire form. Pass 1 (BuildTables) walks the samples once and captures
-// everything into plain vectors; pass 2 (EmitDocument) replays those vectors
+// in the wire form. Pass 1 (build_tables) walks the samples once and captures
+// everything into plain vectors; pass 2 (emit_document) replays those vectors
 // through the writer in final field order.
 
 // Only compiled when CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED (see
@@ -106,8 +106,8 @@ struct SampleEntry {
   int n_attrs;
 };
 
-// Everything BuildTables discovers while walking `stacks`, replayed by
-// EmitDocument in the document's final field order.
+// Everything build_tables discovers while walking `stacks`, replayed by
+// emit_document in the document's final field order.
 struct ProfilesTables {
   std::vector<std::string> strings = {"", "samples", "count", "process.executable.build_id"};
   std::vector<uint32_t> location_addresses;  // locationTable, first-seen order
@@ -115,7 +115,7 @@ struct ProfilesTables {
   std::vector<SampleEntry> samples;          // parallel to stackTable
 };
 
-ProfilesTables BuildTables(const ProfileStack* stacks, std::size_t count,
+ProfilesTables build_tables(const ProfileStack* stacks, std::size_t count,
                           const std::string& build_id) {
   ProfilesTables t;
 
@@ -179,28 +179,32 @@ ProfilesTables BuildTables(const ProfileStack* stacks, std::size_t count,
   return t;
 }
 
-void WriteStringValue(JsonWriter& w, const std::string& s) {
+void write_string_value(JsonWriter& w, const std::string& s) {
   w.BeginObject();
   w.Key("stringValue");
   w.WriteString(s);
   w.EndObject();
 }
 
-// Dotless keys, matching Grafana's convention; an empty value omits the
-// attribute entirely.
-void WriteResourceAttrIfSet(JsonWriter& w, const char* key, const char* value) {
-  if (value == nullptr || value[0] == '\0') {
-    return;
-  }
+void write_resource_attr(JsonWriter& w, const char* key, const char* value) {
   w.BeginObject();
   w.Key("key");
   w.WriteString(key);
   w.Key("value");
-  WriteStringValue(w, value);
+  write_string_value(w, value);
   w.EndObject();
 }
 
-void EmitDocument(JsonWriter& w, const ProfilesTables& t, int64_t time_unix_nano,
+// Dotless keys, matching Grafana's convention; an empty value omits the
+// attribute entirely.
+void write_resource_attr_if_set(JsonWriter& w, const char* key, const char* value) {
+  if (value == nullptr || value[0] == '\0') {
+    return;
+  }
+  write_resource_attr(w, key, value);
+}
+
+void emit_document(JsonWriter& w, const ProfilesTables& t, int64_t time_unix_nano,
                   int64_t duration_nano) {
   w.BeginObject();  // root
 
@@ -212,15 +216,10 @@ void EmitDocument(JsonWriter& w, const ProfilesTables& t, int64_t time_unix_nano
   w.BeginObject();
   w.Key("attributes");
   w.BeginArray();
-  w.BeginObject();
-  w.Key("key");
-  w.WriteString("service.name");
-  w.Key("value");
-  WriteStringValue(w, CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
-  w.EndObject();
-  WriteResourceAttrIfSet(w, "service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
-  WriteResourceAttrIfSet(w, "service_git_ref", esp_opentelemetry::current_git_ref());
-  WriteResourceAttrIfSet(w, "service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
+  write_resource_attr(w, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+  write_resource_attr_if_set(w, "service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
+  write_resource_attr_if_set(w, "service_git_ref", esp_opentelemetry::current_git_ref());
+  write_resource_attr_if_set(w, "service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
   w.EndArray();   // attributes
   w.EndObject();  // resource
 
@@ -363,7 +362,7 @@ void EmitDocument(JsonWriter& w, const ProfilesTables& t, int64_t time_unix_nano
     w.Key("keyStrindex");
     w.WriteInt32(a.key_strindex);
     w.Key("value");
-    WriteStringValue(w, a.value);
+    write_string_value(w, a.value);
     w.EndObject();
   }
   w.EndArray();
@@ -384,10 +383,10 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   const esp_app_desc_t* app = esp_app_get_description();
   const std::string build_id = hex(app->app_elf_sha256, sizeof(app->app_elf_sha256));
 
-  const ProfilesTables tables = BuildTables(stacks, count, build_id);
+  const ProfilesTables tables = build_tables(stacks, count, build_id);
 
   auto writer = MakeCjsonJsonWriter();
-  EmitDocument(*writer, tables, time_unix_nano, duration_nano);
+  emit_document(*writer, tables, time_unix_nano, duration_nano);
   if (!writer->ok()) {
     ESP_LOGW(TAG, "failed to build profiles JSON");
     return;
