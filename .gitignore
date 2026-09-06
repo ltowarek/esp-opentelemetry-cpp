@@ -56,8 +56,9 @@ CMakeUserPresets.json
 
 # ESP-IDF
 build/
-# The protobuf-encoding comparison build of examples/otlp.
+# Comparison builds: examples/otlp on protobuf, examples/profiles with a signal.
 build_protobuf/
+build_tracing/
 sdkconfig
 sdkconfig.old
 dependencies.lock
