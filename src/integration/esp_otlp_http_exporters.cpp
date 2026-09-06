@@ -13,27 +13,37 @@ extern "C" {
 #include <chrono>
 #include <utility>
 
+// The option structs are shared by both encodings; the exporters are not. Each
+// signal's headers are pulled in only when that signal is enabled, so a
+// traces-only firmware does not compile the metric and log mappings.
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 #include "opentelemetry/exporters/otlp/otlp_http_exporter_options.h"
-#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
-#include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
-#else
-#include "opentelemetry/exporters/otlp/otlp_json_http_exporter.h"
-#endif
 #endif
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h"
-#if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
-#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter.h"
-#else
-#include "opentelemetry/exporters/otlp/otlp_json_http_log_record_exporter.h"
-#endif
 #endif
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
+#endif
+
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+#include "opentelemetry/exporters/otlp/otlp_http_exporter.h"
+#endif
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+#include "opentelemetry/exporters/otlp/otlp_http_log_record_exporter.h"
+#endif
+#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h"
+#endif
 #else
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+#include "opentelemetry/exporters/otlp/otlp_json_http_exporter.h"
+#endif
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+#include "opentelemetry/exporters/otlp/otlp_json_http_log_record_exporter.h"
+#endif
+#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/exporters/otlp/otlp_json_http_metric_exporter_factory.h"
 #endif
 #endif

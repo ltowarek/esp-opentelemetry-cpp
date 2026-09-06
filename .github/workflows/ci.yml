@@ -59,6 +59,12 @@ jobs:
           - project: profiles example
             path: examples/profiles
             qemu: true
+          # Profiling plus a signal on the console exporters: the cJSON
+          # JsonWriter is compiled while the SDK's OTLP tree is not.
+          - project: profiles example (with tracing)
+            path: examples/profiles
+            build_args: -B build_tracing -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.tracing" -D SDKCONFIG=build_tracing/sdkconfig
+            cache_id: examples/profiles-tracing
           - project: otlp example
             path: examples/otlp
             no_protobuf: true

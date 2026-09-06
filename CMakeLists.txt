@@ -26,6 +26,24 @@ set(ESP_OPENTELEMETRY_SRCS
     src/workarounds/posix_shims.c
 )
 
+# Whether any signal is enabled at all, and so whether the vendored SDK is
+# built. Named once: half a dozen conditions below turn on it.
+if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+    set(ESP_OPENTELEMETRY_ANY_SIGNAL ON)
+else()
+    set(ESP_OPENTELEMETRY_ANY_SIGNAL OFF)
+endif()
+
+# Whether an exporter family backed by the SDK's OTLP exporter tree is
+# selected. That tree is where the JsonWriter/JsonReader seam targets live, and
+# it is also what makes opentelemetry-cpp demand protobuf at configure time.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+    set(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER ON)
+else()
+    set(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER OFF)
+endif()
+
 # Whether an exporter family that serializes through protobuf is selected.
 # OTLP/HTTP has two serializers to choose between (Kconfig choice
 # ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING); the JTAG exporters wrap the SDK's
@@ -54,11 +72,12 @@ endif()
 # bundled nlohmann backend is excluded below, so every build that compiles an
 # SDK exporter needs this component's cJSON backends - the OTLP/JSON and the
 # protobuf OTLP/HTTP exporters and the OTLP file exporters behind JTAG alike.
-if((CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
-   AND (CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
-        OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED))
+if(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER AND ESP_OPENTELEMETRY_ANY_SIGNAL)
+    set(ESP_OPENTELEMETRY_NEEDS_SDK_JSON_BACKENDS ON)
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_otlp_json_backends.cpp)
     set(ESP_OPENTELEMETRY_NEEDS_CJSON_WRITER ON)
+else()
+    set(ESP_OPENTELEMETRY_NEEDS_SDK_JSON_BACKENDS OFF)
 endif()
 
 # The JTAG sources reference esp_apptrace unconditionally; the app-trace
@@ -186,8 +205,7 @@ if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
     idf_build_set_property(LINK_OPTIONS "-Wl,--defsym=__stop_pb_defaults=0" APPEND)
 endif()
 
-if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
-   OR CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+if(ESP_OPENTELEMETRY_ANY_SIGNAL)
     # opentelemetry-cpp's architecture autodetection does not understand
     # Xtensa; short-circuit it by exporting ARCH to the value it uses for
     # debug logging only. The SDK's actual codegen does not depend on this
@@ -240,9 +258,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     # The SDK's own JsonWriter/JsonReader backend is nlohmann-json, a
     # header-only library whose error path is exceptions - unavailable here.
     # esp_otlp_json_backends.cpp supplies cJSON-backed factories instead, which
-    # every exporter this component constructs is handed explicitly. The
-    # namespaced name is what the SDK's otelcpp_dependent_option() reads; its
-    # value is echoed in the configure log.
+    # every exporter this component constructs is handed explicitly.
     set(OTELCPP_WITH_JSON_WRITER_NLOHMANN OFF CACHE BOOL "" FORCE)
 
     # Materialize Abseil + libprotobuf + the synthesized Protobuf package
@@ -262,7 +278,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
     # configures protobuf and Abseil but compiles and links no part of either.
     # Making the SDK's protobuf gate follow the exporter that actually needs it
     # is an upstream change, not one this component can make.
-    if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+    if(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER)
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/protobuf_setup.cmake)
     endif()
 
@@ -355,10 +371,11 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
 
     target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_common)
     # esp_otlp_json_backends.cpp implements the SDK's two JSON seams, whose
-    # headers these INTERFACE targets carry. They exist whenever the OTLP
-    # exporter tree is configured at all, which is the same condition that
-    # compiles that source.
-    if(ESP_OPENTELEMETRY_NEEDS_CJSON_WRITER)
+    # headers these INTERFACE targets carry. They are defined only when the OTLP
+    # exporter tree is configured, so this follows the condition that compiles
+    # that source and not ESP_OPENTELEMETRY_NEEDS_CJSON_WRITER, which profiling
+    # alone also sets.
+    if(ESP_OPENTELEMETRY_NEEDS_SDK_JSON_BACKENDS)
         target_link_libraries(${COMPONENT_LIB}
             PUBLIC opentelemetry_exporter_otlp_json_writer
                    opentelemetry_exporter_otlp_json_reader)
