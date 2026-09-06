@@ -34,7 +34,9 @@ for elf in "$@"; do
     if [ -n "$found" ]; then
         count=$(printf '%s\n' "$found" | wc -l)
         echo "FAIL: $elf contains $count protobuf/Abseil symbols, e.g."
-        printf '%s\n' "$found" | head -5
+        # `|| true`: head closing the pipe early would otherwise make the
+        # pipeline exit 141 under pipefail and abort before the next file.
+        { printf '%s\n' "$found" | head -5; } || true
         status=1
     else
         echo "OK: $elf contains no protobuf or Abseil symbols"
