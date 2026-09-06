@@ -61,6 +61,15 @@ jobs:
             qemu: true
           - project: otlp example
             path: examples/otlp
+            no_protobuf: true
+          # Same example, protobuf serializer. Its own build directory and
+          # sdkconfig so the two configurations do not fight over one cache.
+          - project: otlp example (protobuf encoding)
+            path: examples/otlp
+            build_args: -B build_protobuf -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.protobuf" -D SDKCONFIG=build_protobuf/sdkconfig
+            # Two matrix entries share examples/otlp; the ccache key is keyed
+            # on the path, so the second needs one of its own.
+            cache_id: examples/otlp-protobuf
           - project: jtag example
             path: examples/jtag
           - project: propagation example
@@ -87,9 +96,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ${{ github.workspace }}/.ccache
-        key: ccache-${{ runner.os }}-idf-${{ matrix.path }}-${{ github.run_id }}
+        key: ccache-${{ runner.os }}-idf-${{ matrix.cache_id || matrix.path }}-${{ github.run_id }}
         restore-keys: |
-          ccache-${{ runner.os }}-idf-${{ matrix.path }}-
+          ccache-${{ runner.os }}-idf-${{ matrix.cache_id || matrix.path }}-
           ccache-${{ runner.os }}-idf-
 
     - name: Build
@@ -97,8 +106,15 @@ jobs:
         CCACHE_DIR: ${{ github.workspace }}/.ccache
       run: |
         source $IDF_PATH/export.sh
-        idf.py build
+        idf.py ${{ matrix.build_args }} build
       working-directory: ${{ matrix.path }}
+
+    - name: Assert the image links no protobuf or Abseil
+      if: ${{ matrix.no_protobuf }}
+      working-directory: ${{ matrix.path }}
+      run: |
+        source $IDF_PATH/export.sh
+        "$GITHUB_WORKSPACE/tools/check_no_protobuf.sh" build/*.elf
 
     - name: Run in QEMU
       if: ${{ matrix.qemu }}

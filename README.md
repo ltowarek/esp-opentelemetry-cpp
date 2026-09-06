@@ -90,10 +90,37 @@ a 4 MB part you do not want to carry the ones you will not call:
 | Console | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM` | The SDK's own ostream exporters; runs under QEMU |
 | JTAG app-trace | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` | `esp_opentelemetry::Jtag*Exporter` — one OTLP/JSON document per line on the app-trace channel, relayed by a host-side forwarder; no network |
 
-OTLP/HTTP and JTAG both serialise through protobuf-generated OTLP types, so
-libprotobuf and Abseil (~30 targets) are only built when at least one of the
-two is selected. A console-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
-`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`.
+### Serialization
+
+OTLP/HTTP has two serializers, chosen by
+`CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING`:
+
+| Choice | Kconfig | What it links |
+|--------|---------|---------------|
+| OTLP/JSON, no protobuf (default) | `CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_JSON` | The SDK's `OtlpJsonHttp*` exporters, which map SDK recordables straight to JSON tokens |
+| OTLP/JSON via protobuf | `CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF` | The SDK's `OtlpHttp*` exporters, plus libprotobuf and Abseil |
+
+Both put the same bytes on the wire — the SDK carries an equivalence test
+asserting the two paths encode identical telemetry identically — so the choice
+is one of build cost, not behaviour. On `examples/otlp`, with all four signals
+enabled, the protobuf-free image is 1.42 MB against 2.39 MB.
+
+The JTAG exporters wrap the SDK's OTLP *file* exporters, which have only the
+protobuf serializer, so selecting JTAG links protobuf and Abseil regardless of
+the OTLP/HTTP choice. A build that selects neither the protobuf encoding nor
+JTAG links neither library; `tools/check_no_protobuf.sh <elf>` is the check.
+
+A console-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
+`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) additionally keeps protobuf and
+Abseil out of the *build*, not only out of the image — see `examples/traces`.
+opentelemetry-cpp requires protobuf whenever its OTLP exporter tree is
+configured at all, even for the exporters that link none of it, so an
+OTLP/JSON build still configures both libraries; nothing in either is compiled.
+
+The SDK reaches JSON only through its `JsonWriter`/`JsonReader` seams, and its
+bundled nlohmann-json backend is excluded (that library's error path is
+exceptions, which ESP-IDF builds disable). This component supplies cJSON-backed
+factories instead, and hands them to every exporter it constructs.
 
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
 an OTLP/HTTP exporter from that signal's `..._OTLP_BASE_URL`, which is what a

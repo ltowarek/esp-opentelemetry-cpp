@@ -44,3 +44,22 @@ for one — drop every record while the export itself reports success.
 idf.py build
 idf.py -p /dev/ttyACM0 flash monitor
 ```
+
+## Comparing the two OTLP/HTTP serializers
+
+The default build uses the protobuf-free OTLP/JSON exporters. To build the same
+firmware on the protobuf ones, in a directory of its own so the two do not
+share a CMake cache:
+
+```sh
+idf.py -B build_protobuf \
+       -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.protobuf" \
+       -D SDKCONFIG=build_protobuf/sdkconfig build
+```
+
+Both emit the same bytes; what differs is the image. `tools/check_no_protobuf.sh`
+reports which of the two you are holding:
+
+```sh
+../../tools/check_no_protobuf.sh build/*.elf build_protobuf/*.elf
+```

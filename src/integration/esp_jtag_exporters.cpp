@@ -3,6 +3,7 @@
 #if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
 
 #include "esp_jtag_channel.hpp"
+#include "esp_otlp_json_backends.hpp"
 
 #include "opentelemetry/exporters/otlp/otlp_file_client_options.h"
 #include "opentelemetry/nostd/shared_ptr.h"
@@ -72,7 +73,8 @@ Options AppTraceOptions() {
 
 JtagSpanExporter::JtagSpanExporter()
     : impl_(new otlp_api::OtlpFileExporter(
-          AppTraceOptions<otlp_api::OtlpFileExporterOptions>())) {}
+          AppTraceOptions<otlp_api::OtlpFileExporterOptions>(),
+          CjsonJsonWriterFactory())) {}
 
 JtagSpanExporter::~JtagSpanExporter() = default;
 
@@ -101,7 +103,8 @@ bool JtagSpanExporter::Shutdown(std::chrono::microseconds timeout) noexcept {
 
 JtagLogRecordExporter::JtagLogRecordExporter()
     : impl_(new otlp_api::OtlpFileLogRecordExporter(
-          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>())) {}
+          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>(),
+          CjsonJsonWriterFactory())) {}
 
 JtagLogRecordExporter::~JtagLogRecordExporter() = default;
 
@@ -134,7 +137,8 @@ bool JtagProfilesExporter::Export(const char* body, std::size_t size) noexcept {
 
 JtagMetricExporter::JtagMetricExporter()
     : impl_(new otlp_api::OtlpFileMetricExporter(
-          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>())) {}
+          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>(),
+          CjsonJsonWriterFactory())) {}
 
 JtagMetricExporter::~JtagMetricExporter() = default;
 

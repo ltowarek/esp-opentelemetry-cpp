@@ -30,6 +30,32 @@ menu "OpenTelemetry"
             OTLP/JSON to a collector through esp_http_client. Pulls in the
             SDK's OTLP/HTTP exporter family.
 
+    choice ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING
+        prompt "OTLP/HTTP serialization"
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        default ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_JSON
+        help
+            Which serializer the OTLP/HTTP exporters use. Both put the same
+            OTLP/JSON on the wire; they differ in what the firmware links to
+            produce it.
+
+    config ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_JSON
+        bool "OTLP/JSON (no protobuf)"
+        help
+            The SDK's OtlpJsonHttp* exporters, which map SDK recordables
+            straight to JSON tokens emitted through this component's cJSON
+            writer. Neither protobuf nor Abseil is compiled or linked.
+
+    config ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF
+        bool "OTLP/JSON via protobuf"
+        help
+            The SDK's OtlpHttp* exporters, which serialize through
+            protobuf-generated OTLP messages and their JSON reflection.
+            Compiles libprotobuf and Abseil into the image; kept so the two
+            paths can be compared on the same hardware.
+
+    endchoice
+
     config ESP_OPENTELEMETRY_EXPORTER_OSTREAM
         bool "Console (ostream) exporters"
         default n
