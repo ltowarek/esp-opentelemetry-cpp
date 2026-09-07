@@ -110,12 +110,15 @@ protobuf serializer, so selecting JTAG links protobuf and Abseil regardless of
 the OTLP/HTTP choice. A build that selects neither the protobuf encoding nor
 JTAG links neither library; `tools/check_no_protobuf.sh <elf>` is the check.
 
-A console-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
-`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) additionally keeps protobuf and
-Abseil out of the *build*, not only out of the image — see `examples/traces`.
-opentelemetry-cpp requires protobuf whenever its OTLP exporter tree is
-configured at all, even for the exporters that link none of it, so an
-OTLP/JSON build still configures both libraries; nothing in either is compiled.
+Any build that neither selects the protobuf encoding nor JTAG keeps protobuf
+and Abseil out of the *build*, not only out of the image — this includes an
+OTLP/JSON `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP` build, not just a
+console-only one (see `examples/traces` and `examples/otlp` with the JSON
+encoding). `third_party/protobuf` and `third_party/abseil-cpp` need not even
+be checked out for such a build. opentelemetry-cpp's own
+`OTELCPP_WITH_OTLP_HTTP_PROTOBUF` option (off by default in this component,
+following `CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING`) gates its protobuf
+materialization on the same condition.
 
 The SDK reaches JSON only through its `JsonWriter`/`JsonReader` seams, and its
 bundled nlohmann-json backend is excluded (that library's error path is

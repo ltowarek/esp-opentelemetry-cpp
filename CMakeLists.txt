@@ -235,11 +235,19 @@ if(ESP_OPENTELEMETRY_ANY_SIGNAL)
     endif()
     # Both OTLP/HTTP exporter families - the protobuf one and the OTLP/JSON one
     # - are built under this single option; which of them a signal links is
-    # decided at target level further down.
+    # decided at target level further down. OTELCPP_WITH_OTLP_HTTP_PROTOBUF
+    # further gates whether the protobuf family (and, transitively, protobuf
+    # and Abseil materialization) is built at all, following the same Kconfig
+    # choice as ESP_OPENTELEMETRY_NEEDS_PROTOBUF above.
     if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
         set(OTELCPP_WITH_OTLP_HTTP ON  CACHE BOOL "" FORCE)
     else()
         set(OTELCPP_WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
+    endif()
+    if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP AND CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+        set(OTELCPP_WITH_OTLP_HTTP_PROTOBUF ON  CACHE BOOL "" FORCE)
+    else()
+        set(OTELCPP_WITH_OTLP_HTTP_PROTOBUF OFF CACHE BOOL "" FORCE)
     endif()
     set(OTELCPP_WITH_PROMETHEUS    OFF CACHE BOOL "" FORCE)
     set(OTELCPP_WITH_ZIPKIN        OFF CACHE BOOL "" FORCE)
@@ -265,20 +273,15 @@ if(ESP_OPENTELEMETRY_ANY_SIGNAL)
     # config *before* opentelemetry-cpp's CMake runs. Without this, the SDK's
     # cmake/protobuf.cmake would fall through to FetchContent and create a
     # duplicate libprotobuf target. The include is guarded inside the .cmake
-    # file so calling it again is a no-op. When neither OTLP/HTTP nor JTAG is
-    # selected, OTELCPP_WITH_OTLP_HTTP/OTELCPP_WITH_OTLP_FILE are both off and
-    # the SDK's own CMakeLists never looks for protobuf either, so skipping
-    # this include is what keeps protobuf + Abseil out of the build entirely
-    # (issue #38).
+    # file so calling it again is a no-op.
     #
-    # This condition is deliberately broader than ESP_OPENTELEMETRY_NEEDS_PROTOBUF:
-    # the SDK requires protobuf whenever its OTLP exporter tree is configured,
-    # even for the OTLP/JSON exporters, which link none of it. Both
-    # subdirectories are added EXCLUDE_FROM_ALL, so an OTLP/JSON firmware
-    # configures protobuf and Abseil but compiles and links no part of either.
-    # Making the SDK's protobuf gate follow the exporter that actually needs it
-    # is an upstream change, not one this component can make.
-    if(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER)
+    # The SDK's own OTELCPP_WITH_OTLP_HTTP_PROTOBUF option (set below) gates
+    # its protobuf materialization on the same condition as
+    # ESP_OPENTELEMETRY_NEEDS_PROTOBUF, so an OTLP/JSON firmware never
+    # configures protobuf or Abseil either here or inside the SDK, and this
+    # component's third_party/protobuf and third_party/abseil-cpp submodules
+    # need not even be checked out for it (issue #38, finished by #118).
+    if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/protobuf_setup.cmake)
     endif()
 
