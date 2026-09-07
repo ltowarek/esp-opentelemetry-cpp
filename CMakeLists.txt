@@ -44,15 +44,23 @@ else()
     set(ESP_OPENTELEMETRY_ANY_OTLP_EXPORTER OFF)
 endif()
 
+# Whether OTLP/HTTP's protobuf serializer (as opposed to OTLP/JSON) is the
+# selected Kconfig encoding. Named once so ESP_OPENTELEMETRY_NEEDS_PROTOBUF
+# below and OTELCPP_WITH_OTLP_HTTP_PROTOBUF further down don't retype it.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+   AND CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+    set(ESP_OPENTELEMETRY_OTLP_HTTP_USES_PROTOBUF ON)
+else()
+    set(ESP_OPENTELEMETRY_OTLP_HTTP_USES_PROTOBUF OFF)
+endif()
+
 # Whether an exporter family that serializes through protobuf is selected.
 # OTLP/HTTP has two serializers to choose between (Kconfig choice
 # ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING); the JTAG exporters wrap the SDK's
 # OTLP file exporters, which have only the protobuf one. The workarounds that
 # exist solely to make protobuf and Abseil link on Xtensa hang off this, so a
 # JSON-only firmware carries none of them.
-if((CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
-    AND CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
-   OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
+if(ESP_OPENTELEMETRY_OTLP_HTTP_USES_PROTOBUF OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
     set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF ON)
 else()
     set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF OFF)
@@ -244,7 +252,7 @@ if(ESP_OPENTELEMETRY_ANY_SIGNAL)
     else()
         set(OTELCPP_WITH_OTLP_HTTP OFF CACHE BOOL "" FORCE)
     endif()
-    if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP AND CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
+    if(ESP_OPENTELEMETRY_OTLP_HTTP_USES_PROTOBUF)
         set(OTELCPP_WITH_OTLP_HTTP_PROTOBUF ON  CACHE BOOL "" FORCE)
     else()
         set(OTELCPP_WITH_OTLP_HTTP_PROTOBUF OFF CACHE BOOL "" FORCE)
