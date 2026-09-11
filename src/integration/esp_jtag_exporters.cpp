@@ -74,7 +74,7 @@ Options AppTraceOptions() {
 JtagSpanExporter::JtagSpanExporter()
     : impl_(new otlp_api::OtlpFileExporter(
           AppTraceOptions<otlp_api::OtlpFileExporterOptions>(),
-          CjsonJsonWriterFactory())) {}
+          CjsonRuntimeOptions<otlp_api::OtlpFileExporterRuntimeOptions>())) {}
 
 JtagSpanExporter::~JtagSpanExporter() = default;
 
@@ -104,7 +104,7 @@ bool JtagSpanExporter::Shutdown(std::chrono::microseconds timeout) noexcept {
 JtagLogRecordExporter::JtagLogRecordExporter()
     : impl_(new otlp_api::OtlpFileLogRecordExporter(
           AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>(),
-          CjsonJsonWriterFactory())) {}
+          CjsonRuntimeOptions<otlp_api::OtlpFileLogRecordExporterRuntimeOptions>())) {}
 
 JtagLogRecordExporter::~JtagLogRecordExporter() = default;
 
@@ -138,7 +138,7 @@ bool JtagProfilesExporter::Export(const char* body, std::size_t size) noexcept {
 JtagMetricExporter::JtagMetricExporter()
     : impl_(new otlp_api::OtlpFileMetricExporter(
           AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>(),
-          CjsonJsonWriterFactory())) {}
+          CjsonRuntimeOptions<otlp_api::OtlpFileMetricExporterRuntimeOptions>())) {}
 
 JtagMetricExporter::~JtagMetricExporter() = default;
 

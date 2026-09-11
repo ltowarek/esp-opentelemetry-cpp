@@ -82,8 +82,9 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporte
   ApplyCommon(options, base_url + "/v1/traces");
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
-      new otlp_api::OtlpHttpExporter(options, otlp_api::OtlpHttpExporterRuntimeOptions(),
-                                     MakeEspHttpClient(), CjsonJsonWriterFactory()));
+      new otlp_api::OtlpHttpExporter(
+          options, CjsonRuntimeOptions<otlp_api::OtlpHttpExporterRuntimeOptions>(),
+          MakeEspHttpClient()));
 #else
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpJsonHttpExporter(
@@ -101,8 +102,8 @@ MakeOtlpHttpLogRecordExporter(const std::string& base_url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpHttpLogRecordExporter(
-          options, otlp_api::OtlpHttpLogRecordExporterRuntimeOptions(),
-          MakeEspHttpClient(), CjsonJsonWriterFactory()));
+          options, CjsonRuntimeOptions<otlp_api::OtlpHttpLogRecordExporterRuntimeOptions>(),
+          MakeEspHttpClient()));
 #else
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpJsonHttpLogRecordExporter(
@@ -119,8 +120,8 @@ MakeOtlpHttpMetricExporter(const std::string& base_url) {
   ApplyCommon(options, base_url + "/v1/metrics");
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return otlp_api::OtlpHttpMetricExporterFactory::Create(
-      options, otlp_api::OtlpHttpMetricExporterRuntimeOptions(), MakeEspHttpClient(),
-      CjsonJsonWriterFactory());
+      options, CjsonRuntimeOptions<otlp_api::OtlpHttpMetricExporterRuntimeOptions>(),
+      MakeEspHttpClient());
 #else
   return otlp_api::OtlpJsonHttpMetricExporterFactory::Create(
       options, otlp_api::OtlpHttpMetricExporterRuntimeOptions(), MakeEspHttpClient(),
