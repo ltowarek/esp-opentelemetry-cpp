@@ -1,6 +1,6 @@
 # metrics example
 
-`OStreamMetricExporter` + the metrics setup: a counter printed to the serial console every export interval. No network and no debugger, so it runs under QEMU.
+The ESP log exporter + the metrics setup: a counter printed to the serial console under the `otel.metric` tag every export interval. No network and no debugger, so it runs under QEMU.
 
 The exporter is constructed in `main.cpp` and passed to the setup call, the
 same way application code selects an exporter upstream.

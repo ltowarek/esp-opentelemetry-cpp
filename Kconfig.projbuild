@@ -38,6 +38,17 @@ menu "OpenTelemetry"
             stdout. Useful for bring-up and QEMU runs; the output is
             human-readable rather than OTLP, so nothing forwards it.
 
+    config ESP_OPENTELEMETRY_EXPORTER_ESP_LOG
+        bool "ESP log exporters"
+        default n
+        help
+            Compiles esp_opentelemetry::MakeEspLog*Exporter(), which print
+            each span, log record, metric data point and profile as an
+            ordinary ESP-IDF log line under its own tag (otel.span,
+            otel.log, otel.metric, otel.profile), filtered by tag and level
+            like any other component's output. Fields mirror what the
+            Ostream exporters print. See esp_log_exporters.hpp.
+
     config ESP_OPENTELEMETRY_EXPORTER_JTAG
         bool "JTAG app-trace exporters"
         depends on ESP_TRACE_TRANSPORT_APPTRACE

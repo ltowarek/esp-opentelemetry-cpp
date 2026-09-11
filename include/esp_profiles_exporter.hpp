@@ -9,7 +9,8 @@
 //       esp_opentelemetry::MakeJtagProfilesExporter());
 //
 // Implementations: MakeJtagProfilesExporter() (esp_jtag_exporters.hpp),
-// MakeOtlpHttpProfilesExporter() (esp_otlp_http_exporters.hpp), and
+// MakeOtlpHttpProfilesExporter() (esp_otlp_http_exporters.hpp),
+// MakeEspLogProfilesExporter() (esp_log_exporters.hpp), and
 // MakeOstreamProfilesExporter() below.
 //
 // The document is OTLP/JSON with unsymbolized program counters; the host end

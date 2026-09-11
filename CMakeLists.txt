@@ -45,6 +45,13 @@ if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
         src/integration/esp_jtag_exporters.cpp)
 endif()
 
+# esp_log_exporters.cpp references each enabled signal's SDK recordable types
+# directly (not through the exporter libraries below), so it only needs to be
+# compiled when the Kconfig option selects it.
+if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
+    list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_log_exporters.cpp)
+endif()
+
 # Profiling's sources reference gptimer/cJSON/the app descriptor unconditionally
 # (no internal #ifdef), so — like tracing/metrics above — they're only built
 # when the signal is enabled; esp_profiling_stub.cpp provides the no-op public

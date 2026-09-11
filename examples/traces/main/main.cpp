@@ -1,8 +1,8 @@
+#include "esp_log_exporters.hpp"
 #include "esp_opentelemetry.hpp"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "opentelemetry/exporters/ostream/span_exporter_factory.h"
 #include "opentelemetry/trace/scope.h"
 
 #include <cstdint>
@@ -17,7 +17,7 @@ extern "C" void app_main()
     // The application picks the exporter, as it does upstream; the setup call
     // only wires it into a processor and provider.
     esp_opentelemetry_tracing_setup(
-        opentelemetry::exporter::trace::OStreamSpanExporterFactory::Create(), resource);
+        esp_opentelemetry::MakeEspLogSpanExporter(), resource);
 
     auto tracer = esp_opentelemetry_tracer();
 
@@ -28,6 +28,7 @@ extern "C" void app_main()
         {
             opentelemetry::trace::Scope scope(parent);
             auto child = tracer->StartSpan("work.step");
+            child->AddEvent("work.step.checkpoint");
             vTaskDelay(pdMS_TO_TICKS(50));
             child->End();
         }
@@ -36,6 +37,11 @@ extern "C" void app_main()
         ESP_LOGI(TAG, "iteration %d", iteration);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+
+    // Shows the Error-status/WARN path the healthy loop above never exercises.
+    auto failed = tracer->StartSpan("work.failed");
+    failed->SetStatus(opentelemetry::trace::StatusCode::kError, "simulated failure");
+    failed->End();
 
     ESP_LOGI(TAG, "done");
 }
