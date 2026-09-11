@@ -23,6 +23,7 @@
 #endif
 
 #include <cstddef>
+#include <memory>
 
 namespace otlp_api = opentelemetry::exporter::otlp;
 
@@ -66,95 +67,44 @@ Options AppTraceOptions() {
   return options;
 }
 
+class JtagProfilesExporter final : public ProfilesExporter {
+ public:
+  bool Export(const char* body, std::size_t size) noexcept override {
+    return jtag_channel::WriteDocument(body, size);
+  }
+};
+
 }  // namespace
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 
-JtagSpanExporter::JtagSpanExporter()
-    : impl_(new otlp_api::OtlpFileExporter(
-          AppTraceOptions<otlp_api::OtlpFileExporterOptions>())) {}
-
-JtagSpanExporter::~JtagSpanExporter() = default;
-
-std::unique_ptr<opentelemetry::sdk::trace::Recordable>
-JtagSpanExporter::MakeRecordable() noexcept {
-  return impl_->MakeRecordable();
-}
-
-opentelemetry::sdk::common::ExportResult JtagSpanExporter::Export(
-    const opentelemetry::nostd::span<
-        std::unique_ptr<opentelemetry::sdk::trace::Recordable>>& spans) noexcept {
-  return impl_->Export(spans);
-}
-
-bool JtagSpanExporter::ForceFlush(std::chrono::microseconds timeout) noexcept {
-  return impl_->ForceFlush(timeout);
-}
-
-bool JtagSpanExporter::Shutdown(std::chrono::microseconds timeout) noexcept {
-  return impl_->Shutdown(timeout);
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter() {
+  return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
+      new otlp_api::OtlpFileExporter(AppTraceOptions<otlp_api::OtlpFileExporterOptions>()));
 }
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 
-JtagLogRecordExporter::JtagLogRecordExporter()
-    : impl_(new otlp_api::OtlpFileLogRecordExporter(
-          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>())) {}
-
-JtagLogRecordExporter::~JtagLogRecordExporter() = default;
-
-std::unique_ptr<opentelemetry::sdk::logs::Recordable>
-JtagLogRecordExporter::MakeRecordable() noexcept {
-  return impl_->MakeRecordable();
-}
-
-opentelemetry::sdk::common::ExportResult JtagLogRecordExporter::Export(
-    const opentelemetry::nostd::span<
-        std::unique_ptr<opentelemetry::sdk::logs::Recordable>>& records) noexcept {
-  return impl_->Export(records);
-}
-
-bool JtagLogRecordExporter::ForceFlush(std::chrono::microseconds timeout) noexcept {
-  return impl_->ForceFlush(timeout);
-}
-
-bool JtagLogRecordExporter::Shutdown(std::chrono::microseconds timeout) noexcept {
-  return impl_->Shutdown(timeout);
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordExporter() {
+  return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
+      new otlp_api::OtlpFileLogRecordExporter(
+          AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>()));
 }
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
-bool JtagProfilesExporter::Export(const char* body, std::size_t size) noexcept {
-  return jtag_channel::WriteDocument(body, size);
+std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter() {
+  return std::make_unique<JtagProfilesExporter>();
 }
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 
-JtagMetricExporter::JtagMetricExporter()
-    : impl_(new otlp_api::OtlpFileMetricExporter(
-          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>())) {}
-
-JtagMetricExporter::~JtagMetricExporter() = default;
-
-opentelemetry::sdk::metrics::AggregationTemporality
-JtagMetricExporter::GetAggregationTemporality(
-    opentelemetry::sdk::metrics::InstrumentType instrument_type) const noexcept {
-  return impl_->GetAggregationTemporality(instrument_type);
-}
-
-opentelemetry::sdk::common::ExportResult JtagMetricExporter::Export(
-    const opentelemetry::sdk::metrics::ResourceMetrics& data) noexcept {
-  return impl_->Export(data);
-}
-
-bool JtagMetricExporter::ForceFlush(std::chrono::microseconds timeout) noexcept {
-  return impl_->ForceFlush(timeout);
-}
-
-bool JtagMetricExporter::Shutdown(std::chrono::microseconds timeout) noexcept {
-  return impl_->Shutdown(timeout);
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricExporter() {
+  return std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>(
+      new otlp_api::OtlpFileMetricExporter(
+          AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>()));
 }
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED

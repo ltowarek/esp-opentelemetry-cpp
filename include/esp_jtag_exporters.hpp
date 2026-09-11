@@ -10,17 +10,18 @@
 // Usage:
 //
 //   esp_opentelemetry_tracing_setup(
-//       std::make_unique<esp_opentelemetry::JtagSpanExporter>(), resource);
+//       esp_opentelemetry::MakeJtagSpanExporter(), resource);
 //
-// One class per signal. All four share the single app-trace channel, one whole
-// document at a time, so concurrent signals cannot interleave into an
-// unparseable line. The trace/logs/metrics classes are compiled only when their
-// signal is enabled; JtagProfilesExporter is not, being a transport for a JSON
+// One factory per signal, each returning the SDK's own exporter interface.
+// All four share the single app-trace channel, one whole document at a time,
+// so concurrent signals cannot interleave into an unparseable line. The
+// trace/logs/metrics factories are compiled only when their signal is
+// enabled; MakeJtagProfilesExporter() is not, being a transport for a JSON
 // document rather than a hook into the profiler.
 //
-// Pass one to the matching esp_opentelemetry_*_setup() call, or to a provider
-// you build yourself - the application chooses its exporter, as it does
-// upstream.
+// Pass the result to the matching esp_opentelemetry_*_setup() call, or to a
+// provider you build yourself - the application chooses its exporter, as it
+// does upstream.
 //
 // A dropped document is logged but still reported to the processor as a
 // successful export: OtlpFileAppender::Export returns void, so OtlpFileClient
@@ -40,20 +41,14 @@
 
 #include "esp_profiles_exporter.hpp"
 
-#include "opentelemetry/nostd/span.h"
-#include "opentelemetry/sdk/common/exporter_utils.h"
-
-#include <chrono>
 #include <memory>
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 #include "opentelemetry/sdk/trace/exporter.h"
-#include "opentelemetry/sdk/trace/recordable.h"
 #endif
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "opentelemetry/sdk/logs/exporter.h"
-#include "opentelemetry/sdk/logs/recordable.h"
 #endif
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
@@ -69,80 +64,17 @@ namespace esp_opentelemetry {
 // SimpleSpanProcessor to the processor-taking overload instead to flush per
 // span, which keeps each document small at the cost of an export on every
 // span end.
-class JtagSpanExporter final : public opentelemetry::sdk::trace::SpanExporter {
- public:
-  JtagSpanExporter();
-  ~JtagSpanExporter() override;
-
-  std::unique_ptr<opentelemetry::sdk::trace::Recordable> MakeRecordable() noexcept override;
-
-  opentelemetry::sdk::common::ExportResult Export(
-      const opentelemetry::nostd::span<
-          std::unique_ptr<opentelemetry::sdk::trace::Recordable>>& spans) noexcept override;
-
-  bool ForceFlush(std::chrono::microseconds timeout =
-                      (std::chrono::microseconds::max)()) noexcept override;
-
-  bool Shutdown(std::chrono::microseconds timeout =
-                    (std::chrono::microseconds::max)()) noexcept override;
-
- private:
-  // OtlpFileExporter with an app-trace backend. Held by base-class pointer so
-  // this header does not drag the OTLP exporter and protobuf headers into
-  // every translation unit that constructs the exporter.
-  std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> impl_;
-};
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter();
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
-class JtagLogRecordExporter final : public opentelemetry::sdk::logs::LogRecordExporter {
- public:
-  JtagLogRecordExporter();
-  ~JtagLogRecordExporter() override;
-
-  std::unique_ptr<opentelemetry::sdk::logs::Recordable> MakeRecordable() noexcept override;
-
-  opentelemetry::sdk::common::ExportResult Export(
-      const opentelemetry::nostd::span<
-          std::unique_ptr<opentelemetry::sdk::logs::Recordable>>& records) noexcept override;
-
-  bool ForceFlush(std::chrono::microseconds timeout =
-                      (std::chrono::microseconds::max)()) noexcept override;
-
-  bool Shutdown(std::chrono::microseconds timeout =
-                    (std::chrono::microseconds::max)()) noexcept override;
-
- private:
-  std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> impl_;
-};
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordExporter();
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
-class JtagProfilesExporter final : public ProfilesExporter {
- public:
-  bool Export(const char* body, std::size_t size) noexcept override;
-};
+std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter();
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
-class JtagMetricExporter final : public opentelemetry::sdk::metrics::PushMetricExporter {
- public:
-  JtagMetricExporter();
-  ~JtagMetricExporter() override;
-
-  opentelemetry::sdk::metrics::AggregationTemporality GetAggregationTemporality(
-      opentelemetry::sdk::metrics::InstrumentType instrument_type) const noexcept override;
-
-  opentelemetry::sdk::common::ExportResult Export(
-      const opentelemetry::sdk::metrics::ResourceMetrics& data) noexcept override;
-
-  bool ForceFlush(std::chrono::microseconds timeout =
-                      (std::chrono::microseconds::max)()) noexcept override;
-
-  bool Shutdown(std::chrono::microseconds timeout =
-                    (std::chrono::microseconds::max)()) noexcept override;
-
- private:
-  std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> impl_;
-};
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricExporter();
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
 }  // namespace esp_opentelemetry

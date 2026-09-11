@@ -6,11 +6,11 @@
 // every other signal:
 //
 //   esp_opentelemetry_profiling_setup(
-//       std::make_unique<esp_opentelemetry::JtagProfilesExporter>());
+//       esp_opentelemetry::MakeJtagProfilesExporter());
 //
-// Implementations: JtagProfilesExporter (esp_jtag_exporters.hpp),
+// Implementations: MakeJtagProfilesExporter() (esp_jtag_exporters.hpp),
 // MakeOtlpHttpProfilesExporter() (esp_otlp_http_exporters.hpp), and
-// MakeConsoleProfilesExporter() below.
+// MakeOstreamProfilesExporter() below.
 //
 // The document is OTLP/JSON with unsymbolized program counters; the host end
 // is normally the symbolizer (tools/symbolizer/), which resolves them against
@@ -38,9 +38,9 @@ class ProfilesExporter {
 #if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
 // Prints each document between PROFILE_JSON_BEGIN / PROFILE_JSON_END markers.
 // Profiles have no human-readable renderer, so this is the raw JSON. The other
-// signals get their console exporters from the SDK; this one has no SDK to get
+// signals get their ostream exporters from the SDK; this one has no SDK to get
 // it from.
-std::unique_ptr<ProfilesExporter> MakeConsoleProfilesExporter();
+std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter();
 #endif
 
 }  // namespace esp_opentelemetry

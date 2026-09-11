@@ -31,7 +31,7 @@ menu "OpenTelemetry"
             SDK's OTLP/HTTP exporter family.
 
     config ESP_OPENTELEMETRY_EXPORTER_OSTREAM
-        bool "Console (ostream) exporters"
+        bool "Ostream exporters"
         default n
         help
             Compiles the SDK's ostream exporters, which print each signal to
