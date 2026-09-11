@@ -33,4 +33,11 @@ CjsonJsonWriterFactory();
 std::shared_ptr<opentelemetry::exporter::otlp::JsonReaderFactory>
 CjsonJsonReaderFactory();
 
+template <typename RuntimeOptions>
+RuntimeOptions CjsonRuntimeOptions() {
+  RuntimeOptions runtime_options;
+  runtime_options.json_writer_factory = CjsonJsonWriterFactory();
+  return runtime_options;
+}
+
 }  // namespace esp_opentelemetry
