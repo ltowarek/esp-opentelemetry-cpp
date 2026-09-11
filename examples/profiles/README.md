@@ -1,6 +1,6 @@
 # profiles example
 
-The statistical CPU profiler with the console profiles exporter: an OTLP/JSON `ProfilesData` document dumped to the serial console. No network and no debugger, so it runs under QEMU.
+The statistical CPU profiler with the ostream profiles exporter: an OTLP/JSON `ProfilesData` document dumped to the serial console. No network and no debugger, so it runs under QEMU.
 
 The exporter is constructed in `main.cpp` and passed to the setup call, the
 same way application code selects an exporter upstream.

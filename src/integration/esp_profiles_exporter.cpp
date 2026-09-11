@@ -8,7 +8,7 @@ namespace esp_opentelemetry {
 
 namespace {
 
-class ConsoleProfilesExporter final : public ProfilesExporter {
+class OstreamProfilesExporter final : public ProfilesExporter {
  public:
   bool Export(const char* body, std::size_t /*size*/) noexcept override {
     printf("PROFILE_JSON_BEGIN\n%s\nPROFILE_JSON_END\n", body);
@@ -18,8 +18,8 @@ class ConsoleProfilesExporter final : public ProfilesExporter {
 
 }  // namespace
 
-std::unique_ptr<ProfilesExporter> MakeConsoleProfilesExporter() {
-  return std::make_unique<ConsoleProfilesExporter>();
+std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
+  return std::make_unique<OstreamProfilesExporter>();
 }
 
 }  // namespace esp_opentelemetry

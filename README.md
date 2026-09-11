@@ -87,12 +87,12 @@ a 4 MB part you do not want to carry the ones you will not call:
 | Exporter | Kconfig | Where signals go |
 |----------|---------|------------------|
 | OTLP/HTTP | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP` (default y) | `esp_opentelemetry::MakeOtlpHttp*Exporter()` — POSTed to a collector over Wi-Fi |
-| Console | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM` | The SDK's own ostream exporters; runs under QEMU |
-| JTAG app-trace | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` | `esp_opentelemetry::Jtag*Exporter` — one OTLP/JSON document per line on the app-trace channel, relayed by a host-side forwarder; no network |
+| Ostream | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM` | The SDK's own ostream exporters; runs under QEMU |
+| JTAG app-trace | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` | `esp_opentelemetry::MakeJtag*Exporter()` — one OTLP/JSON document per line on the app-trace channel, relayed by a host-side forwarder; no network |
 
 OTLP/HTTP and JTAG both serialise through protobuf-generated OTLP types, so
 libprotobuf and Abseil (~30 targets) are only built when at least one of the
-two is selected. A console-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
+two is selected. An ostream-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
 `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`.
 
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
@@ -142,13 +142,13 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 |------|-----------------|
 | `src/integration/esp_http_client_transport.cpp` | `HttpClient` implementation backed by `esp_http_client`, passed directly to `OtlpHttpExporter`'s HTTP-client constructor overload ([open-telemetry/opentelemetry-cpp#4071](https://github.com/open-telemetry/opentelemetry-cpp/pull/4071)), replacing libcurl for the OTLP/HTTP exporter |
 | `src/integration/esp_tracing.cpp` | `esp_opentelemetry_tracing_setup()` / `esp_opentelemetry_tracer()` — ESP-friendly wiring of exporter, processor (64 KB PSRAM export-thread stack), resource, and W3C propagator via Kconfig |
-| `src/integration/esp_jtag_exporters.cpp` | `esp_opentelemetry::JtagSpanExporter` / `JtagLogRecordExporter` / `JtagMetricExporter` — OTLP/JSON written to the ESP-IDF app-trace (JTAG) channel instead of the network; reuses the SDK's OTLP file exporters through a custom `OtlpFileAppender`, so the encoding is identical to the OTLP/HTTP exporters' |
+| `src/integration/esp_jtag_exporters.cpp` | `esp_opentelemetry::MakeJtagSpanExporter()` / `MakeJtagLogRecordExporter()` / `MakeJtagMetricExporter()` — OTLP/JSON written to the ESP-IDF app-trace (JTAG) channel instead of the network; reuses the SDK's OTLP file exporters through a custom `OtlpFileAppender`, so the encoding is identical to the OTLP/HTTP exporters' |
 | `src/integration/esp_jtag_channel.cpp` | The single app-trace writer behind every JTAG exporter: chunks a document into the buffer, terminates a truncated line so the stream resynchronises, and serialises whole documents so concurrent signals cannot interleave. Profiles, whose exporter is hand-rolled, write through it directly |
 | `src/integration/esp_metrics.cpp` | `esp_opentelemetry_metrics_setup()` — `PeriodicExportingMetricReader` + OTLP/HTTP metric exporter; `observe_double/observe_int64` helpers over the `ObserverResult` variant API |
 | `src/integration/esp_logs.cpp` | `esp_opentelemetry_logs_setup()` / `esp_opentelemetry_logger()` — `BatchLogRecordProcessor` + OTLP/HTTP log record exporter; `esp_opentelemetry_log_and_emit()`, the bridge the `esp_log_otel.h` `ESP_LOGx` wrappers expand to |
-| `include/esp_jtag_exporters.hpp` | Public declarations of the JTAG exporters, one class per signal, each compiled away when its signal or `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` is off. Application code constructs one and passes it to the matching `..._setup()` call, as it would upstream |
+| `include/esp_jtag_exporters.hpp` | Public declarations of the JTAG exporter factories, one per signal, each compiled away when its signal or `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` is off. Application code calls one and passes the result to the matching `..._setup()` call, as it would upstream |
 | `include/esp_otlp_http_exporters.hpp` / `src/integration/esp_otlp_http_exporters.cpp` | `MakeOtlpHttp*Exporter()` — the SDK's OTLP/HTTP exporters bound to `esp_http_client`, since upstream's own factories build a libcurl client that does not cross-compile to Xtensa |
-| `include/esp_profiles_exporter.hpp` | `ProfilesExporter` — the exporter interface opentelemetry-cpp has for every signal except profiles. Shaped like the SDK's, so profiles are selected the same way: `JtagProfilesExporter` sits with the other JTAG classes, `MakeOtlpHttpProfilesExporter()` with the other OTLP/HTTP factories, and `src/integration/esp_profiles_exporter.cpp` holds the console one |
+| `include/esp_profiles_exporter.hpp` | `ProfilesExporter` — the exporter interface opentelemetry-cpp has for every signal except profiles. Shaped like the SDK's, so profiles are selected the same way: `MakeJtagProfilesExporter()` sits with the other JTAG factories, `MakeOtlpHttpProfilesExporter()` with the other OTLP/HTTP factories, and `src/integration/esp_profiles_exporter.cpp` holds the ostream one |
 | `include/esp_log_otel.h` | `ESP_LOGE`/`ESP_LOGW`/`ESP_LOGI` wrappers capturing the call site's file, line and function, gated on the project's own `ESP_LOG_ENABLED()` compile-time cap. Opt-in per translation unit; not pulled in by `esp_opentelemetry.hpp` |
 | `src/integration/esp_profiling.cpp` | `esp_opentelemetry_profiling_setup()` — per-core gptimer-ISR statistical sampler (`esp_backtrace`), lock-free rings, stack aggregation |
 | `src/integration/esp_profiles_document.cpp` | `esp_opentelemetry::export_profiles()` — builds the OTLP profiles (`v1development`) document with cJSON and hands it to the installed `ProfilesExporter`; opentelemetry-cpp has no profiles SDK to build it for us |

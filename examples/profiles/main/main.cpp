@@ -9,7 +9,7 @@ extern "C" void app_main()
 {
     // Profiles have no SDK exporter interface, so the component supplies one;
     // the application picks an implementation the same way.
-    esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeConsoleProfilesExporter());
+    esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeOstreamProfilesExporter());
 
     for (int iteration = 0; iteration < 5; ++iteration) {
         // Burn a little CPU so the sampler has stacks to aggregate.
