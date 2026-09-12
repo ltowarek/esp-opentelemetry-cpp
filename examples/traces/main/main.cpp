@@ -38,7 +38,7 @@ extern "C" void app_main()
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    // Shows the Error-status/WARN path the healthy loop above never exercises.
+    // Shows the Error-status field the healthy loop above never sets.
     auto failed = tracer->StartSpan("work.failed");
     failed->SetStatus(opentelemetry::trace::StatusCode::kError, "simulated failure");
     failed->End();

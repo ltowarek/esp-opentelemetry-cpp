@@ -43,11 +43,10 @@ menu "OpenTelemetry"
         default n
         help
             Compiles esp_opentelemetry::MakeEspLog*Exporter(), which print
-            each span, log record, metric data point and profile as an
-            ordinary ESP-IDF log line under its own tag (otel.span,
-            otel.log, otel.metric, otel.profile), filtered by tag and level
-            like any other component's output. Fields mirror what the
-            Ostream exporters print. See esp_log_exporters.hpp.
+            each signal through esp_log under its own tag (otel.span,
+            otel.log, otel.metric, otel.profile) instead of std::cout. Pulls
+            in the corresponding Ostream exporter target(s) even when that
+            option is off. See esp_log_exporters.hpp.
 
     config ESP_OPENTELEMETRY_EXPORTER_JTAG
         bool "JTAG app-trace exporters"

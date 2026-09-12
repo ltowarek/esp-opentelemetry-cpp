@@ -45,9 +45,9 @@ if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
         src/integration/esp_jtag_exporters.cpp)
 endif()
 
-# esp_log_exporters.cpp references each enabled signal's SDK recordable types
-# directly (not through the exporter libraries below), so it only needs to be
-# compiled when the Kconfig option selects it.
+# esp_log_exporters.cpp delegates to the SDK's Ostream exporters (see the
+# opentelemetry_exporter_ostream_* links below) through a custom streambuf, so
+# it only needs to be compiled when the Kconfig option selects it.
 if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_log_exporters.cpp)
 endif()
@@ -259,7 +259,11 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file)
         endif()
-        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
+            # The ESP log exporter delegates to OStreamSpanExporter, piping
+            # its output through a custom streambuf into ESP_LOGx rather than
+            # reformatting it; it needs this target whether or not the
+            # Ostream exporter itself is separately selected.
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_span)
         endif()
     endif()
@@ -272,7 +276,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file_metric)
         endif()
-        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_metrics)
         endif()
     endif()
@@ -285,7 +289,7 @@ if(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED OR CONFIG_ESP_OPENTELEMETRY_METRICS_
         if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_otlp_file_log)
         endif()
-        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM)
+        if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM OR CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
             target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_exporter_ostream_logs)
         endif()
     endif()
