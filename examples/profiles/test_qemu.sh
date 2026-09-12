@@ -2,4 +2,4 @@
 set -euo pipefail
 
 timeout 120 idf.py qemu 2>&1 | tee /tmp/qemu.log || true
-grep -qE "PROFILE_JSON_BEGIN" /tmp/qemu.log && echo "PASS" || { echo "FAIL"; exit 1; }
+grep -qE "I \([0-9]+\) otel\.profile: " /tmp/qemu.log && echo "PASS" || { echo "FAIL"; exit 1; }

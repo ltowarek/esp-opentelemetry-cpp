@@ -1,6 +1,6 @@
 # logs example
 
-`OStreamLogRecordExporter` + the logs setup: log records printed to the serial console. No network and no debugger, so it runs under QEMU.
+The ESP log exporter + the logs setup: log records printed to the serial console under the `otel.log` tag. No network and no debugger, so it runs under QEMU.
 
 The exporter is constructed in `main.cpp` and passed to the setup call, the
 same way application code selects an exporter upstream.

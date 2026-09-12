@@ -88,12 +88,13 @@ a 4 MB part you do not want to carry the ones you will not call:
 |----------|---------|------------------|
 | OTLP/HTTP | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP` (default y) | `esp_opentelemetry::MakeOtlpHttp*Exporter()` — POSTed to a collector over Wi-Fi |
 | Ostream | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM` | The SDK's own ostream exporters; runs under QEMU |
+| ESP log | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG` | `esp_opentelemetry::MakeEspLog*Exporter()` — the SDK's own Ostream span/log/metric exporters, piped through a custom `std::streambuf` so each physical output line becomes one `ESP_LOGI` call under `otel.span`/`otel.log`/`otel.metric` (profiles have no Ostream exporter to delegate to, so that one stays a hand-rolled single line under `otel.profile`); runs under QEMU |
 | JTAG app-trace | `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` | `esp_opentelemetry::MakeJtag*Exporter()` — one OTLP/JSON document per line on the app-trace channel, relayed by a host-side forwarder; no network |
 
 OTLP/HTTP and JTAG both serialise through protobuf-generated OTLP types, so
 libprotobuf and Abseil (~30 targets) are only built when at least one of the
-two is selected. An ostream-only build (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
-`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`.
+two is selected. A build with both off (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n`,
+`CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`, which uses the ESP log exporter instead.
 
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
 an OTLP/HTTP exporter from that signal's `..._OTLP_BASE_URL`, which is what a
@@ -107,10 +108,10 @@ defines one (`esp_profiles_exporter.hpp`) and
 
 | Example | Description | Hardware needed |
 |---------|-------------|-----------------|
-| [`examples/traces/`](examples/traces/) | One signal, simplest exporter: `OStreamSpanExporter` printing a parent/child span to the console. | None (QEMU) |
-| [`examples/metrics/`](examples/metrics/) | One signal, simplest exporter: `OStreamMetricExporter` printing a counter. | None (QEMU) |
-| [`examples/logs/`](examples/logs/) | One signal, simplest exporter: `OStreamLogRecordExporter` printing log records. | None (QEMU) |
-| [`examples/profiles/`](examples/profiles/) | One signal, simplest exporter: the CPU profiler dumping OTLP/JSON `ProfilesData` to the console. | None (QEMU) |
+| [`examples/traces/`](examples/traces/) | One signal, simplest exporter: the ESP log exporter printing a parent/child span, a span event and an Error-status span to the console. | None (QEMU) |
+| [`examples/metrics/`](examples/metrics/) | One signal, simplest exporter: the ESP log exporter printing a counter. | None (QEMU) |
+| [`examples/logs/`](examples/logs/) | One signal, simplest exporter: the ESP log exporter printing log records. | None (QEMU) |
+| [`examples/profiles/`](examples/profiles/) | One signal, simplest exporter: the CPU profiler dumping OTLP/JSON `ProfilesData` to the console via the ESP log exporter. | None (QEMU) |
 | [`examples/otlp/`](examples/otlp/) | Every signal over OTLP/HTTP to a collector, with Wi-Fi and SNTP bring-up. | Wi-Fi |
 | [`examples/jtag/`](examples/jtag/) | Every signal over one JTAG app-trace channel, forwarded to a collector by OpenOCD + Vector. | JTAG (no network) |
 | [`examples/propagation/`](examples/propagation/) | W3C TraceContext inject across an HTTP boundary; logs the `traceparent` header injected into an outgoing request. | Wi-Fi |
@@ -148,7 +149,8 @@ The `src/integration/` subtree contains code that is deliberately ESP32-specific
 | `src/integration/esp_logs.cpp` | `esp_opentelemetry_logs_setup()` / `esp_opentelemetry_logger()` — `BatchLogRecordProcessor` + OTLP/HTTP log record exporter; `esp_opentelemetry_log_and_emit()`, the bridge the `esp_log_otel.h` `ESP_LOGx` wrappers expand to |
 | `include/esp_jtag_exporters.hpp` | Public declarations of the JTAG exporter factories, one per signal, each compiled away when its signal or `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG` is off. Application code calls one and passes the result to the matching `..._setup()` call, as it would upstream |
 | `include/esp_otlp_http_exporters.hpp` / `src/integration/esp_otlp_http_exporters.cpp` | `MakeOtlpHttp*Exporter()` — the SDK's OTLP/HTTP exporters bound to `esp_http_client`, since upstream's own factories build a libcurl client that does not cross-compile to Xtensa |
-| `include/esp_profiles_exporter.hpp` | `ProfilesExporter` — the exporter interface opentelemetry-cpp has for every signal except profiles. Shaped like the SDK's, so profiles are selected the same way: `MakeJtagProfilesExporter()` sits with the other JTAG factories, `MakeOtlpHttpProfilesExporter()` with the other OTLP/HTTP factories, and `src/integration/esp_profiles_exporter.cpp` holds the ostream one |
+| `include/esp_profiles_exporter.hpp` | `ProfilesExporter` — the exporter interface opentelemetry-cpp has for every signal except profiles. Shaped like the SDK's, so profiles are selected the same way: `MakeJtagProfilesExporter()` sits with the other JTAG factories, `MakeOtlpHttpProfilesExporter()` with the other OTLP/HTTP factories, `MakeEspLogProfilesExporter()` with the other ESP log factories, and `src/integration/esp_profiles_exporter.cpp` holds the ostream one |
+| `include/esp_log_exporters.hpp` / `src/integration/esp_log_exporters.cpp` | `MakeEspLog*Exporter()` — for spans, logs and metrics, a thin wrapper around the SDK's own `OStreamSpanExporter`/`OStreamLogRecordExporter`/`OStreamMetricExporter`, with a custom `std::streambuf` in place of `std::cout` that turns each physical output line into one `ESP_LOGI` call under `otel.span`/`otel.log`/`otel.metric`. `MakeEspLogProfilesExporter()` has no Ostream exporter to wrap, so it keeps a hand-rolled single `ESP_LOGI` line under `otel.profile` |
 | `include/esp_log_otel.h` | `ESP_LOGE`/`ESP_LOGW`/`ESP_LOGI` wrappers capturing the call site's file, line and function, gated on the project's own `ESP_LOG_ENABLED()` compile-time cap. Opt-in per translation unit; not pulled in by `esp_opentelemetry.hpp` |
 | `src/integration/esp_profiling.cpp` | `esp_opentelemetry_profiling_setup()` — per-core gptimer-ISR statistical sampler (`esp_backtrace`), lock-free rings, stack aggregation |
 | `src/integration/esp_profiles_document.cpp` | `esp_opentelemetry::export_profiles()` — builds the OTLP profiles (`v1development`) document with cJSON and hands it to the installed `ProfilesExporter`; opentelemetry-cpp has no profiles SDK to build it for us |
@@ -161,7 +163,8 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 
 | Feature | Status | Example |
 |---------|--------|---------|
-| `OStreamSpanExporter` | Tested (QEMU) | [`examples/traces/`](examples/traces/) |
+| `OStreamSpanExporter` | Tested (QEMU) — via the ESP log exporter, which wraps it | [`examples/traces/`](examples/traces/) |
+| ESP log span exporter (`MakeEspLogSpanExporter`) | Tested (QEMU) | [`examples/traces/`](examples/traces/) |
 | `SimpleSpanProcessor` | Tested (hardware, ESP32-S3) — via the processor-taking `esp_opentelemetry_tracing_setup()` overload | [`examples/jtag/`](examples/jtag/) |
 | `BatchSpanProcessor` | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | `OtlpHttpExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
@@ -170,16 +173,19 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | Span attributes (`SetAttribute`) | Tested | covered by all examples |
 | `PeriodicExportingMetricReader` + `OtlpHttpMetricExporter` (JSON) | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | OTLP profiles (`v1development`, JSON) + span profiles | Tested (hardware, ESP32-S3; Pyroscope 1.18 / collector 0.146) | [`examples/profiles/`](examples/profiles/) (QEMU), [`examples/otlp/`](examples/otlp/) |
+| ESP log profiles exporter (`MakeEspLogProfilesExporter`) | Tested (QEMU) | [`examples/profiles/`](examples/profiles/) |
 | Custom `RuntimeContextStorage` (per-task span slot) | Tested (hardware, ESP32-S3 + QEMU) | [`examples/profiles/`](examples/profiles/) |
-| Span events (`AddEvent`) | Untested | — |
+| Span events (`AddEvent`) | Tested (QEMU) | [`examples/traces/`](examples/traces/) |
 | `OtlpHttpExporter` (protobuf) | Untested | — |
-| `OStreamMetricExporter` | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
+| `OStreamMetricExporter` | Tested (QEMU) — via the ESP log exporter, which wraps it | [`examples/metrics/`](examples/metrics/) |
+| ESP log metric exporter (`MakeEspLogMetricExporter`) | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | `PeriodicExportingMetricReader` | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | `OtlpHttpMetricExporter` | Linked | — |
 | Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | Observable gauge (`AddCallback`) | Linked | — |
-| `OStreamLogRecordExporter` | Tested (QEMU) | [`examples/logs/`](examples/logs/) |
+| `OStreamLogRecordExporter` | Tested (QEMU) — via the ESP log exporter, which wraps it | [`examples/logs/`](examples/logs/) |
+| ESP log log-record exporter (`MakeEspLogLogRecordExporter`) | Tested (QEMU) | [`examples/logs/`](examples/logs/) |
 | `SimpleLogRecordProcessor` | Linked — via the processor-taking `esp_opentelemetry_logs_setup()` overload | — |
 | `BatchLogRecordProcessor` | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |
 | `OtlpHttpLogRecordExporter` (JSON) | Tested (hardware, ESP32-S3; Loki 3.7 / collector 0.156) | [`examples/otlp/`](examples/otlp/) |
-| Log record attributes + `ESP_LOG` call-site capture | Tested (hardware, ESP32-S3 + QEMU) | [`examples/logs/`](examples/logs/) (QEMU), [`examples/otlp/`](examples/otlp/) |
+| Log record attributes + `ESP_LOG` call-site capture | Tested (hardware, ESP32-S3) | [`examples/otlp/`](examples/otlp/) |

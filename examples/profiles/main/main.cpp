@@ -1,3 +1,4 @@
+#include "esp_log_exporters.hpp"
 #include "esp_opentelemetry.hpp"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -9,7 +10,7 @@ extern "C" void app_main()
 {
     // Profiles have no SDK exporter interface, so the component supplies one;
     // the application picks an implementation the same way.
-    esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeOstreamProfilesExporter());
+    esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeEspLogProfilesExporter());
 
     for (int iteration = 0; iteration < 5; ++iteration) {
         // Burn a little CPU so the sampler has stacks to aggregate.
