@@ -33,10 +33,3 @@ updates:
       esp-idf:
         patterns:
           - "espressif/idf"
-    ignore:
-      # Patch releases only: they are auto-merged once CI passes, while a new
-      # ESP-IDF minor or major release needs a manual upgrade.
-      - dependency-name: "espressif/idf"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-major"
