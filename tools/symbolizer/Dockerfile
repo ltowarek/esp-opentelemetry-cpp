@@ -4,7 +4,7 @@
 # Same ESP-IDF version as .devcontainer/Dockerfile, which explains the pin.
 FROM espressif/idf:v6.0.3@sha256:54278f2c01e6e759502e2f04c9103589c17528923426f4d63193490c7a08f555 AS toolchain
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 COPY --from=toolchain /opt/esp/tools/xtensa-esp-elf /opt/xtensa-esp-elf
 RUN set -eux; \
     ln -s "$(ls -d /opt/xtensa-esp-elf/*/xtensa-esp-elf/bin)/xtensa-esp-elf-addr2line" \
