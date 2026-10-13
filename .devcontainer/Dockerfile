@@ -1,4 +1,10 @@
-FROM espressif/idf:release-v6.0
+# Pinned to v6.0.3: later release/v6.0 images hang every ESP32-S3 QEMU boot.
+# Merge 1f8d24ceeb7 ("fix(usb_phy): Fixed USB PHY clock during low-power modes")
+# has USB Serial/JTAG init busy-wait on I2C_MST_BBPLL_CAL_DONE, a bit Espressif's
+# QEMU never sets (https://github.com/espressif/qemu/issues/193). Move back to
+# release-v6.0 once a QEMU release with the fix (espressif/qemu#195) is out.
+# The digest keeps the image fixed even if Docker Hub re-pushes the v6.0.3 tag.
+FROM espressif/idf:v6.0.3@sha256:54278f2c01e6e759502e2f04c9103589c17528923426f4d63193490c7a08f555
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
