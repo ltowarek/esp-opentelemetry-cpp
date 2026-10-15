@@ -21,7 +21,6 @@ set(ESP_OPENTELEMETRY_SRCS
     src/integration/esp_metrics.cpp
     src/integration/esp_tracing.cpp
     src/workarounds/posix_shims.c
-    src/workarounds/esp_heap_align.cpp
 )
 
 # The OTLP/HTTP exporters and the esp_http_client transport behind them are
@@ -129,11 +128,6 @@ idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=nanosleep" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=pthread_atfork" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=sysconf" APPEND)
 idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=__wrap_sysconf" APPEND)
-# _Znwj = operator new(unsigned int) — Itanium ABI mangled name on 32-bit
-# targets (size_t == unsigned int on Xtensa). Forces esp_heap_align.cpp.o
-# onto the link line before the linker encounters any C++ allocation site,
-# so the conforming operator new wins over any weak default.
-idf_build_set_property(LINK_OPTIONS "-Wl,--undefined=_Znwj" APPEND)
 # protobuf reads __start_pb_defaults/__stop_pb_defaults, which a linker
 # synthesises only for an output section of that name. src/workarounds/
 # pb_defaults.lf merges the section into flash_rodata instead, so the pair is
