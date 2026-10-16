@@ -1,9 +1,9 @@
 // OpenTelemetry profiles (v1development) JSON exporter.
 //
 // opentelemetry-cpp has no profiles SDK, so — unlike the trace/metric exporters
-// that drive the vendored SDK — this builds the ProfilesData document directly
-// with cJSON. It uses the same OTLP/JSON wire form as the other signals and
-// lives here so all OTLP signal emission stays in one component. Where the
+// that drive the vendored SDK — this writes the ProfilesData document directly.
+// It uses the same OTLP/JSON wire form as the other signals and lives here so
+// all OTLP signal emission stays in one component. Where the
 // document goes is the application's choice, through the ProfilesExporter it
 // installs (esp_profiles_exporter.hpp) - the stand-in for the exporter
 // interface opentelemetry-cpp has for every other signal.
@@ -18,18 +18,18 @@
 
 extern "C" {
 #include "esp_app_desc.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "json_generator.h"
 }
-
-#include <cJSON.h>
 
 #include "esp_git_ref.hpp"
 #include "esp_profiles_exporter.hpp"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/trace/span_id.h"
 
-#include <cstring>
+#include <array>
 #include <memory>
 #include <utility>
 #include <string>
@@ -54,6 +54,8 @@ constexpr const char* TAG = "esp_otel_profiles";
 
 // Fixed string_table prefix; index 0 must be "".
 enum : int { kStrEmpty = 0, kStrSamples = 1, kStrCount = 2, kStrBuildId = 3 };
+// attribute_table[0], referenced by the mapping.
+constexpr int kAttrBuildId = 0;
 
 std::string hex(const uint8_t* bytes, size_t n) {
   static const char* d = "0123456789abcdef";
@@ -82,17 +84,225 @@ std::string span_id_hex(const uint8_t (&span_id)[8]) {
   return std::string(buf, sizeof(buf));
 }
 
-cJSON* value_string(const char* s) {
-  cJSON* v = cJSON_CreateObject();
-  cJSON_AddStringToObject(v, "stringValue", s);
-  return v;
+// Every string, location and attribute the samples refer to, resolved to its
+// index before anything is written: the samples come before the dictionary
+// they point into.
+struct Document {
+  const ProfileStack* stacks;
+  std::size_t count;
+  std::vector<std::string> strings = {"", "samples", "count", "process.executable.build_id"};
+  std::vector<uint32_t> locations;
+  std::vector<std::pair<int, std::string>> attributes;
+  std::vector<int> stack_locations;
+  std::vector<std::array<int, 2>> sample_attributes;
+  std::vector<int> sample_attribute_counts;
+  std::string time_unix_nano;
+  std::string duration_nano;
+  std::string profile_id;
+};
+
+Document resolve(const ProfileStack* stacks, std::size_t count, int64_t time_unix_nano,
+                 int64_t duration_nano) {
+  Document doc;
+  doc.stacks = stacks;
+  doc.count = count;
+  doc.time_unix_nano = std::to_string(time_unix_nano);
+  doc.duration_nano = std::to_string(duration_nano);
+  doc.profile_id = random_profile_id();
+
+  auto intern = [&](const std::string& s) -> int {
+    for (size_t i = 0; i < doc.strings.size(); ++i) {
+      if (doc.strings[i] == s) return static_cast<int>(i);
+    }
+    doc.strings.push_back(s);
+    return static_cast<int>(doc.strings.size() - 1);
+  };
+
+  std::unordered_map<uint32_t, int> addr_index;
+  auto location_for = [&](uint32_t addr) -> int {
+    auto it = addr_index.find(addr);
+    if (it != addr_index.end()) return it->second;
+    int idx = static_cast<int>(doc.locations.size());
+    addr_index.emplace(addr, idx);
+    doc.locations.push_back(addr);
+    return idx;
+  };
+
+  const esp_app_desc_t* app = esp_app_get_description();
+  doc.attributes.emplace_back(kStrBuildId,
+                              hex(app->app_elf_sha256, sizeof(app->app_elf_sha256)));
+  std::unordered_map<std::string, int> attr_index;
+  // Pyroscope turns sample attributes into labels and requires valid
+  // Prometheus label names (no dots): thread_name, not thread.name. The
+  // span_id attribute is what feeds Pyroscope's span-profiles API (the OTLP
+  // link_table is ignored by Pyroscope 1.18.1, so no links are emitted).
+  auto attr_for = [&](const char* key, const std::string& value) -> int {
+    std::string dedupe_key = std::string(key) + "\x1f" + value;
+    auto it = attr_index.find(dedupe_key);
+    if (it != attr_index.end()) return it->second;
+    int idx = static_cast<int>(doc.attributes.size());
+    doc.attributes.emplace_back(intern(key), value);
+    attr_index.emplace(std::move(dedupe_key), idx);
+    return idx;
+  };
+
+  doc.sample_attributes.resize(count);
+  doc.sample_attribute_counts.resize(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const ProfileStack& s = stacks[i];
+    for (int d = 0; d < s.depth; ++d) {
+      doc.stack_locations.push_back(location_for(s.addresses[d]));
+    }
+    int& n = doc.sample_attribute_counts[i];
+    doc.sample_attributes[i][n++] = attr_for("thread_name", s.task_name ? s.task_name : "?");
+    if (s.has_span) {
+      doc.sample_attributes[i][n++] = attr_for("span_id", span_id_hex(s.span_id));
+    }
+  }
+  return doc;
 }
 
-cJSON* attribute(int key_strindex, const char* string_value) {
-  cJSON* a = cJSON_CreateObject();
-  cJSON_AddNumberToObject(a, "keyStrindex", key_strindex);
-  cJSON_AddItemToObject(a, "value", value_string(string_value));
-  return a;
+void write_string_value(json_gen_str_t* j, const char* name, const char* s) {
+  json_gen_push_object(j, name);
+  json_gen_obj_set_string(j, "stringValue", s);
+  json_gen_pop_object(j);
+}
+
+// Dotless keys, matching Grafana's convention; empty value omits the attribute.
+void write_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
+  if (value == nullptr || value[0] == '\0') {
+    return;
+  }
+  json_gen_start_object(j);
+  json_gen_obj_set_string(j, "key", key);
+  write_string_value(j, "value", value);
+  json_gen_end_object(j);
+}
+
+void write_resource(json_gen_str_t* j) {
+  json_gen_push_object(j, "resource");
+  json_gen_push_array(j, "attributes");
+  write_resource_attribute(j, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+  write_resource_attribute(j, "service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
+  write_resource_attribute(j, "service_git_ref", esp_opentelemetry::current_git_ref());
+  write_resource_attribute(j, "service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
+  json_gen_pop_array(j);
+  json_gen_pop_object(j);
+}
+
+void write_sample_type(json_gen_str_t* j, const char* name) {
+  json_gen_push_object(j, name);
+  json_gen_obj_set_int(j, "typeStrindex", kStrSamples);
+  json_gen_obj_set_int(j, "unitStrindex", kStrCount);
+  json_gen_pop_object(j);
+}
+
+void write_profile(json_gen_str_t* j, const Document& doc) {
+  json_gen_start_object(j);
+  write_sample_type(j, "sampleType");
+  json_gen_push_array(j, "samples");
+  for (std::size_t i = 0; i < doc.count; ++i) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "stackIndex", static_cast<int>(i));
+    json_gen_push_array(j, "values");
+    json_gen_arr_set_string(j, std::to_string(doc.stacks[i].count).c_str());
+    json_gen_pop_array(j);
+    json_gen_push_array(j, "attributeIndices");
+    for (int a = 0; a < doc.sample_attribute_counts[i]; ++a) {
+      json_gen_arr_set_int(j, doc.sample_attributes[i][a]);
+    }
+    json_gen_pop_array(j);
+    json_gen_end_object(j);
+  }
+  json_gen_pop_array(j);
+  json_gen_obj_set_string(j, "timeUnixNano", doc.time_unix_nano.c_str());
+  json_gen_obj_set_string(j, "durationNano", doc.duration_nano.c_str());
+  write_sample_type(j, "periodType");
+  // Pyroscope requires a non-zero period to derive the profile metric name;
+  // one count == one sample.
+  json_gen_obj_set_string(j, "period", "1");
+  json_gen_obj_set_string(j, "profileId", doc.profile_id.c_str());
+  json_gen_end_object(j);
+}
+
+void write_dictionary(json_gen_str_t* j, const Document& doc) {
+  json_gen_push_object(j, "dictionary");
+
+  json_gen_push_array(j, "stringTable");
+  for (const auto& str : doc.strings) {
+    json_gen_arr_set_string(j, str.c_str());
+  }
+  json_gen_pop_array(j);
+
+  json_gen_push_array(j, "functionTable");
+  json_gen_pop_array(j);
+
+  json_gen_push_array(j, "mappingTable");
+  json_gen_start_object(j);
+  json_gen_obj_set_string(j, "memoryStart", "0");
+  json_gen_obj_set_string(j, "memoryLimit", "0");
+  json_gen_obj_set_string(j, "fileOffset", "0");
+  json_gen_obj_set_int(j, "filenameStrindex", kStrEmpty);
+  json_gen_push_array(j, "attributeIndices");
+  json_gen_arr_set_int(j, kAttrBuildId);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
+
+  json_gen_push_array(j, "locationTable");
+  for (uint32_t addr : doc.locations) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "mappingIndex", 0);
+    json_gen_obj_set_string(j, "address", std::to_string(addr).c_str());
+    json_gen_end_object(j);
+  }
+  json_gen_pop_array(j);
+
+  json_gen_push_array(j, "stackTable");
+  std::size_t next_location = 0;
+  for (std::size_t i = 0; i < doc.count; ++i) {
+    json_gen_start_object(j);
+    json_gen_push_array(j, "locationIndices");
+    for (int d = 0; d < doc.stacks[i].depth; ++d) {
+      json_gen_arr_set_int(j, doc.stack_locations[next_location++]);
+    }
+    json_gen_pop_array(j);
+    json_gen_end_object(j);
+  }
+  json_gen_pop_array(j);
+
+  json_gen_push_array(j, "attributeTable");
+  for (const auto& [key_strindex, value] : doc.attributes) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "keyStrindex", key_strindex);
+    write_string_value(j, "value", value.c_str());
+    json_gen_end_object(j);
+  }
+  json_gen_pop_array(j);
+
+  json_gen_pop_object(j);
+}
+
+void write_document(json_gen_str_t* j, const Document& doc) {
+  json_gen_start_object(j);
+  json_gen_push_array(j, "resourceProfiles");
+  json_gen_start_object(j);
+  write_resource(j);
+  json_gen_push_array(j, "scopeProfiles");
+  json_gen_start_object(j);
+  json_gen_push_object(j, "scope");
+  json_gen_obj_set_string(j, "name", "esp-profiling");
+  json_gen_obj_set_string(j, "version", "1.0.0");
+  json_gen_pop_object(j);
+  json_gen_push_array(j, "profiles");
+  write_profile(j, doc);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
+  write_dictionary(j, doc);
+  json_gen_end_object(j);
 }
 
 }  // namespace
@@ -102,188 +312,32 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   if (g_exporter == nullptr || count == 0) {
     return;
   }
+  const Document doc = resolve(stacks, count, time_unix_nano, duration_nano);
 
-  const esp_app_desc_t* app = esp_app_get_description();
-  const std::string build_id = hex(app->app_elf_sha256, sizeof(app->app_elf_sha256));
-
-  std::vector<std::string> strings = {"", "samples", "count",
-                                      "process.executable.build_id"};
-  auto intern = [&](const std::string& s) -> int {
-    for (size_t i = 0; i < strings.size(); ++i) {
-      if (strings[i] == s) return static_cast<int>(i);
-    }
-    strings.push_back(s);
-    return static_cast<int>(strings.size() - 1);
-  };
-
-  cJSON* location_table = cJSON_CreateArray();
-  std::unordered_map<uint32_t, int> addr_index;
-  auto location_for = [&](uint32_t addr) -> int {
-    auto it = addr_index.find(addr);
-    if (it != addr_index.end()) return it->second;
-    int idx = static_cast<int>(addr_index.size());
-    addr_index.emplace(addr, idx);
-    cJSON* loc = cJSON_CreateObject();
-    cJSON_AddNumberToObject(loc, "mappingIndex", 0);
-    cJSON_AddStringToObject(loc, "address", std::to_string(addr).c_str());
-    cJSON_AddItemToArray(location_table, loc);
-    return idx;
-  };
-
-  // attribute_table[0] = build_id (referenced by the mapping); thread_name and
-  // span_id entries follow, deduplicated and referenced per sample.
-  cJSON* attribute_table = cJSON_CreateArray();
-  cJSON_AddItemToArray(attribute_table, attribute(kStrBuildId, build_id.c_str()));
-  std::unordered_map<std::string, int> attr_index;
-  // cJSON arrays are linked lists with no cached length, so track the next
-  // index ourselves instead of calling cJSON_GetArraySize() (O(n) traversal)
-  // on every insert.
-  int next_attr_idx = 1;
-  // Pyroscope turns sample attributes into labels and requires valid
-  // Prometheus label names (no dots): thread_name, not thread.name. The
-  // span_id attribute is what feeds Pyroscope's span-profiles API (the OTLP
-  // link_table is ignored by Pyroscope 1.18.1, so no links are emitted).
-  auto attr_for = [&](const char* key, const std::string& value) -> int {
-    std::string dedupe_key = std::string(key) + "\x1f" + value;
-    auto it = attr_index.find(dedupe_key);
-    if (it != attr_index.end()) return it->second;
-    int idx = next_attr_idx++;
-    cJSON_AddItemToArray(attribute_table, attribute(intern(key), value.c_str()));
-    attr_index.emplace(std::move(dedupe_key), idx);
-    return idx;
-  };
-  auto thread_attr_for = [&](const char* task) -> int {
-    return attr_for("thread_name", task ? task : "?");
-  };
-
-  cJSON* stack_table = cJSON_CreateArray();
-  cJSON* samples = cJSON_CreateArray();
-  // Reused across iterations (clear() keeps its buffer) instead of
-  // heap-allocating a fresh vector per sample.
-  std::vector<int> loc_indices;
-  for (std::size_t i = 0; i < count; ++i) {
-    const ProfileStack& s = stacks[i];
-
-    loc_indices.clear();
-    loc_indices.reserve(s.depth);
-    for (int d = 0; d < s.depth; ++d) {
-      loc_indices.push_back(location_for(s.addresses[d]));
-    }
-    cJSON* stk = cJSON_CreateObject();
-    cJSON_AddItemToObject(stk, "locationIndices",
-                          cJSON_CreateIntArray(loc_indices.data(),
-                                               static_cast<int>(loc_indices.size())));
-    cJSON_AddItemToArray(stack_table, stk);
-
-    cJSON* sample = cJSON_CreateObject();
-    cJSON_AddNumberToObject(sample, "stackIndex", static_cast<double>(i));
-    cJSON* values = cJSON_CreateArray();
-    cJSON_AddItemToArray(values, cJSON_CreateString(std::to_string(s.count).c_str()));
-    cJSON_AddItemToObject(sample, "values", values);
-    int attrs[2] = {thread_attr_for(s.task_name), 0};
-    int n_attrs = 1;
-    if (s.has_span) {
-      attrs[n_attrs++] = attr_for("span_id", span_id_hex(s.span_id));
-    }
-    cJSON_AddItemToObject(sample, "attributeIndices", cJSON_CreateIntArray(attrs, n_attrs));
-    cJSON_AddItemToArray(samples, sample);
-  }
-
-  cJSON* mapping = cJSON_CreateObject();
-  cJSON_AddStringToObject(mapping, "memoryStart", "0");
-  cJSON_AddStringToObject(mapping, "memoryLimit", "0");
-  cJSON_AddStringToObject(mapping, "fileOffset", "0");
-  cJSON_AddNumberToObject(mapping, "filenameStrindex", kStrEmpty);
-  int build_id_attr[] = {0};
-  cJSON_AddItemToObject(mapping, "attributeIndices", cJSON_CreateIntArray(build_id_attr, 1));
-  cJSON* mapping_table = cJSON_CreateArray();
-  cJSON_AddItemToArray(mapping_table, mapping);
-
-  cJSON* string_table = cJSON_CreateArray();
-  for (const auto& s : strings) {
-    cJSON_AddItemToArray(string_table, cJSON_CreateString(s.c_str()));
-  }
-
-  cJSON* dictionary = cJSON_CreateObject();
-  cJSON_AddItemToObject(dictionary, "stringTable", string_table);
-  cJSON_AddItemToObject(dictionary, "functionTable", cJSON_CreateArray());
-  cJSON_AddItemToObject(dictionary, "mappingTable", mapping_table);
-  cJSON_AddItemToObject(dictionary, "locationTable", location_table);
-  cJSON_AddItemToObject(dictionary, "stackTable", stack_table);
-  cJSON_AddItemToObject(dictionary, "attributeTable", attribute_table);
-
-  cJSON* sample_type = cJSON_CreateObject();
-  cJSON_AddNumberToObject(sample_type, "typeStrindex", kStrSamples);
-  cJSON_AddNumberToObject(sample_type, "unitStrindex", kStrCount);
-
-  cJSON* profile = cJSON_CreateObject();
-  cJSON_AddItemToObject(profile, "sampleType", sample_type);
-  cJSON_AddItemToObject(profile, "samples", samples);
-  cJSON_AddStringToObject(profile, "timeUnixNano", std::to_string(time_unix_nano).c_str());
-  cJSON_AddStringToObject(profile, "durationNano", std::to_string(duration_nano).c_str());
-  cJSON* period_type = cJSON_CreateObject();
-  cJSON_AddNumberToObject(period_type, "typeStrindex", kStrSamples);
-  cJSON_AddNumberToObject(period_type, "unitStrindex", kStrCount);
-  cJSON_AddItemToObject(profile, "periodType", period_type);
-  // Pyroscope requires a non-zero period to derive the profile metric name;
-  // one count == one sample.
-  cJSON_AddStringToObject(profile, "period", "1");
-  cJSON_AddStringToObject(profile, "profileId", random_profile_id().c_str());
-
-  cJSON* profiles = cJSON_CreateArray();
-  cJSON_AddItemToArray(profiles, profile);
-
-  cJSON* scope = cJSON_CreateObject();
-  cJSON_AddStringToObject(scope, "name", "esp-profiling");
-  cJSON_AddStringToObject(scope, "version", "1.0.0");
-  cJSON* scope_profiles = cJSON_CreateObject();
-  cJSON_AddItemToObject(scope_profiles, "scope", scope);
-  cJSON_AddItemToObject(scope_profiles, "profiles", profiles);
-
-  cJSON* resource_attr = cJSON_CreateArray();
-  cJSON* svc = cJSON_CreateObject();
-  cJSON_AddStringToObject(svc, "key", "service.name");
-  cJSON_AddItemToObject(svc, "value", value_string(CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME));
-  cJSON_AddItemToArray(resource_attr, svc);
-
-  // Dotless keys, matching Grafana's convention; empty value omits the attribute.
-  auto add_resource_attr = [&](const char* key, const char* value) {
-    if (value == nullptr || value[0] == '\0') {
-      return;
-    }
-    cJSON* attr = cJSON_CreateObject();
-    cJSON_AddStringToObject(attr, "key", key);
-    cJSON_AddItemToObject(attr, "value", value_string(value));
-    cJSON_AddItemToArray(resource_attr, attr);
-  };
-  add_resource_attr("service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
-  add_resource_attr("service_git_ref", esp_opentelemetry::current_git_ref());
-  add_resource_attr("service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
-
-  cJSON* resource = cJSON_CreateObject();
-  cJSON_AddItemToObject(resource, "attributes", resource_attr);
-
-  cJSON* resource_profiles = cJSON_CreateObject();
-  cJSON_AddItemToObject(resource_profiles, "resource", resource);
-  cJSON* scope_profiles_arr = cJSON_CreateArray();
-  cJSON_AddItemToArray(scope_profiles_arr, scope_profiles);
-  cJSON_AddItemToObject(resource_profiles, "scopeProfiles", scope_profiles_arr);
-
-  cJSON* root = cJSON_CreateObject();
-  cJSON* resource_profiles_arr = cJSON_CreateArray();
-  cJSON_AddItemToArray(resource_profiles_arr, resource_profiles);
-  cJSON_AddItemToObject(root, "resourceProfiles", resource_profiles_arr);
-  cJSON_AddItemToObject(root, "dictionary", dictionary);
-
-  char* body = cJSON_PrintUnformatted(root);
-  cJSON_Delete(root);
-  if (body == nullptr) {
-    ESP_LOGW(TAG, "failed to serialize profiles JSON");
+  json_gen_str_t jstr;
+  json_gen_str_start_measure(&jstr);
+  write_document(&jstr, doc);
+  const int size = json_gen_str_end(&jstr);
+  if (size < 0) {
+    ESP_LOGW(TAG, "failed to measure profiles JSON: %d", size);
     return;
   }
-
-  (void)g_exporter->Export(body, strlen(body));
-  cJSON_free(body);
+  // The document grows with the profile; the tasks around the export need
+  // internal RAM for FreeRTOS objects, sockets and DMA.
+  char* body = static_cast<char*>(heap_caps_malloc_prefer(
+      static_cast<size_t>(size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+  if (body == nullptr) {
+    ESP_LOGW(TAG, "no memory for a %d-byte profiles JSON", size);
+    return;
+  }
+  json_gen_str_start(&jstr, body, size, nullptr, nullptr);
+  write_document(&jstr, doc);
+  if (json_gen_str_end(&jstr) < 0) {
+    ESP_LOGW(TAG, "failed to serialize profiles JSON");
+  } else {
+    (void)g_exporter->Export(body, static_cast<std::size_t>(size - 1));
+  }
+  heap_caps_free(body);
 }
 
 }  // namespace esp_opentelemetry

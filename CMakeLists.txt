@@ -52,7 +52,7 @@ if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG)
     list(APPEND ESP_OPENTELEMETRY_SRCS src/integration/esp_log_exporters.cpp)
 endif()
 
-# Profiling's sources reference gptimer/cJSON/the app descriptor unconditionally
+# Profiling's sources reference gptimer/json_generator/the app descriptor unconditionally
 # (no internal #ifdef), so — like tracing/metrics above — they're only built
 # when the signal is enabled; esp_profiling_stub.cpp provides the no-op public
 # API otherwise so callers can call it unconditionally either way.
@@ -102,11 +102,11 @@ set(ESP_OPENTELEMETRY_REQUIRES
 # nothing unless its transport is selected).
 list(APPEND ESP_OPENTELEMETRY_REQUIRES
     app_trace
-    cjson
     esp_app_format
     esp_hw_support
     esp_driver_gptimer
-    esp_timer)
+    esp_timer
+    json_generator)
 
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}
