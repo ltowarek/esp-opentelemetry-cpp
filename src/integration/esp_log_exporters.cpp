@@ -117,6 +117,12 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter(
   return std::make_unique<EspLogSpanExporter>();
 }
 
+#else
+
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter() {
+  return nullptr;
+}
+
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
@@ -157,6 +163,12 @@ class EspLogLogRecordExporter final : public sdk_logs::LogRecordExporter {
 
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter() {
   return std::make_unique<EspLogLogRecordExporter>();
+}
+
+#else
+
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter() {
+  return nullptr;
 }
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
@@ -202,6 +214,12 @@ class EspLogMetricExporter final : public metrics_sdk::PushMetricExporter {
 
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter() {
   return std::make_unique<EspLogMetricExporter>();
+}
+
+#else
+
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter() {
+  return nullptr;
 }
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED

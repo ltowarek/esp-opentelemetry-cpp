@@ -100,7 +100,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL
         string "Tracing OTLP base URL (e.g. http://192.168.1.10:4318)"
-        depends on ESP_OPENTELEMETRY_TRACING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP trace export. The path "/v1/traces" is
@@ -179,7 +179,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL
         string "Profiles OTLP/HTTP endpoint (the profiling-symbolizer)"
-        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL of the profiling-symbolizer; "/v1development/profiles" is
@@ -188,6 +188,9 @@ menu "OpenTelemetry"
             them against the firmware ELF before forwarding to the collector.
             Distinct from the tracing endpoint (profiles go via the symbolizer,
             not directly to the collector). Leave empty to disable export.
+            Like every signal's base URL, it exists whether or not the signal
+            is enabled, so an application builds its exporter the same way in
+            every build.
 
     config ESP_OPENTELEMETRY_PROFILES_SPAN_ATTRIBUTE
         string "Span attribute linking spans to profiles"
@@ -222,7 +225,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL
         string "Logs OTLP base URL"
-        depends on ESP_OPENTELEMETRY_LOGS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP log export. The path "/v1/logs" is
@@ -272,7 +275,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL
         string "Metrics OTLP base URL"
-        depends on ESP_OPENTELEMETRY_METRICS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is

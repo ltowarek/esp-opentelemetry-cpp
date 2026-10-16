@@ -14,10 +14,10 @@
 //
 // One factory per signal, each returning the SDK's own exporter interface.
 // All four share the single app-trace channel, one whole document at a time,
-// so concurrent signals cannot interleave into an unparseable line. The
-// trace/logs/metrics factories are compiled only when their signal is
-// enabled; MakeJtagProfilesExporter() is not, being a transport for a JSON
-// document rather than a hook into the profiler.
+// so concurrent signals cannot interleave into an unparseable line. Every
+// factory exists whenever this family is compiled in; one whose signal is
+// disabled returns nullptr, which the signal's setup call treats as the
+// signal off.
 //
 // Pass the result to the matching esp_opentelemetry_*_setup() call, or to a
 // provider you build yourself - the application chooses its exporter, as it
@@ -43,21 +43,12 @@
 
 #include <memory>
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-#include "opentelemetry/sdk/trace/exporter.h"
-#endif
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "opentelemetry/sdk/logs/exporter.h"
-#endif
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/sdk/metrics/push_metric_exporter.h"
-#endif
+#include "opentelemetry/sdk/trace/exporter.h"
 
 namespace esp_opentelemetry {
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 // The exporter-taking esp_opentelemetry_tracing_setup() overload wraps this in
 // a BatchSpanProcessor, so a batch - not a single span - is what reaches the
 // channel; the writer chunks it to fit the app-trace buffer. Pass a
@@ -65,17 +56,12 @@ namespace esp_opentelemetry {
 // span, which keeps each document small at the cost of an export on every
 // span end.
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
 std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter();
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
 }  // namespace esp_opentelemetry
 

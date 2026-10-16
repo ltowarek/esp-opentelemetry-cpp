@@ -8,8 +8,10 @@
 //   auto processor = BatchSpanProcessorFactory::Create(std::move(exporter), opts);
 //   auto provider  = TracerProviderFactory::Create(std::move(processor), resource);
 //
-// Requires CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP, and each signal's own
-// ..._ENABLED option for that signal's factory.
+// Requires CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP. Every factory and
+// every signal's ..._OTLP_BASE_URL option exist whenever this family is
+// compiled in; a factory whose signal is disabled returns nullptr, which the
+// signal's setup call treats as the signal off.
 
 #pragma once
 
@@ -22,35 +24,23 @@
 #include <memory>
 #include <string>
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-#include "opentelemetry/sdk/trace/exporter.h"
-#endif
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "opentelemetry/sdk/logs/exporter.h"
-#endif
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/sdk/metrics/push_metric_exporter.h"
-#endif
+#include "opentelemetry/sdk/trace/exporter.h"
 
 namespace esp_opentelemetry {
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 // base_url is the collector root; "/v1/traces" is appended.
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
     const std::string& base_url);
-#endif
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 // base_url is the collector root; "/v1/logs" is appended.
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
 MakeOtlpHttpLogRecordExporter(const std::string& base_url);
-#endif
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 // base_url is the collector root; "/v1/metrics" is appended.
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
 MakeOtlpHttpMetricExporter(const std::string& base_url);
-#endif
 
 // base_url is the symbolizer root; "/v1development/profiles" is appended. Not
 // gated on the profiling signal: this is a transport for a JSON document, not

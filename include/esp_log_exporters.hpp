@@ -30,10 +30,9 @@
 // bridged line - once as the plain console line the bridge always writes,
 // and again as this exporter's own lines for the resulting record.
 //
-// Requires CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG. Each signal's factory is
-// compiled only when that signal is enabled; MakeEspLogProfilesExporter() is
-// not, being a transport for a JSON document rather than a hook into the
-// profiler.
+// Requires CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG. Every factory exists
+// whenever this family is compiled in; one whose signal is disabled returns
+// nullptr, which the signal's setup call treats as the signal off.
 
 #pragma once
 
@@ -45,34 +44,20 @@
 
 #include <memory>
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-#include "opentelemetry/sdk/trace/exporter.h"
-#endif
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 #include "opentelemetry/sdk/logs/exporter.h"
-#endif
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 #include "opentelemetry/sdk/metrics/push_metric_exporter.h"
-#endif
+#include "opentelemetry/sdk/trace/exporter.h"
 
 namespace esp_opentelemetry {
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
 // Prints under the "otel.span" tag, at INFO.
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 // Prints under the "otel.log" tag, at INFO.
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 // Prints under the "otel.metric" tag, at INFO.
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter();
-#endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
 // Prints the raw JSON document on one INFO line under the "otel.profile" tag,
 // with no begin/end markers.

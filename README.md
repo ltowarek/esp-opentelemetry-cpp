@@ -70,7 +70,7 @@ CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"   # t
 CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2     # per-task span slot for span profiles
 ```
 
-When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead.
+When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead. Its exporter factories and base-URL option still exist; the factories return `nullptr`, which the setup call treats as the signal off, so turning a signal on or off needs no change to application code.
 
 The application constructs its exporter and passes it to the setup call, as it
 does with the upstream SDK:

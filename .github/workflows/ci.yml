@@ -62,6 +62,9 @@ jobs:
           - project: profiles export memory test
             path: test/profiles_export_memory
             qemu: true
+          - project: signals disabled test
+            path: test/signals_disabled
+            qemu: true
           - project: otlp example
             path: examples/otlp
           - project: jtag example
