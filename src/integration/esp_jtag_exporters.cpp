@@ -75,36 +75,24 @@ Options AppTraceOptions() {
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpFileExporter(AppTraceOptions<otlp_api::OtlpFileExporterOptions>()));
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeJtagSpanExporter() {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpFileLogRecordExporter(
           AppTraceOptions<otlp_api::OtlpFileLogRecordExporterOptions>()));
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeJtagLogRecordExporter() {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
 
@@ -119,33 +107,25 @@ class JtagProfilesExporter final : public ProfilesExporter {
 
 }  // namespace
 
-std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter() {
-  return std::make_unique<JtagProfilesExporter>();
-}
-
-#else
-
-std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+std::unique_ptr<ProfilesExporter> MakeJtagProfilesExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+  return std::make_unique<JtagProfilesExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
   return std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>(
       new otlp_api::OtlpFileMetricExporter(
           AppTraceOptions<otlp_api::OtlpFileMetricExporterOptions>()));
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeJtagMetricExporter() {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
 }  // namespace esp_opentelemetry
 

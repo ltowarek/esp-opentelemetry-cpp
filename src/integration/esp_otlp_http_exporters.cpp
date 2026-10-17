@@ -53,61 +53,40 @@ void ApplyCommon(Options& options, const std::string& url) {
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
-
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
-    const std::string& base_url) {
+    [[maybe_unused]] const std::string& base_url) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   otlp_api::OtlpHttpExporterOptions options;
   ApplyCommon(options, base_url + "/v1/traces");
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(options, MakeEspHttpClient()));
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
-    const std::string& /*base_url*/) {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
-MakeOtlpHttpLogRecordExporter(const std::string& base_url) {
+MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   otlp_api::OtlpHttpLogRecordExporterOptions options;
   ApplyCommon(options, base_url + "/v1/logs");
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpHttpLogRecordExporter(options, MakeEspHttpClient()));
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
-MakeOtlpHttpLogRecordExporter(const std::string& /*base_url*/) {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
-MakeOtlpHttpMetricExporter(const std::string& base_url) {
+MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& base_url) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
   otlp_api::OtlpHttpMetricExporterOptions options;
   ApplyCommon(options, base_url + "/v1/metrics");
   return otlp_api::OtlpHttpMetricExporterFactory::Create(options, MakeEspHttpClient());
-}
-
 #else
-
-std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
-MakeOtlpHttpMetricExporter(const std::string& /*base_url*/) {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
 
@@ -154,20 +133,17 @@ class OtlpHttpProfilesExporter final : public ProfilesExporter {
 
 }  // namespace
 
+#endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
+
 std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
-    const std::string& base_url) {
+    [[maybe_unused]] const std::string& base_url) {
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
   return std::make_unique<OtlpHttpProfilesExporter>(base_url +
                                                     "/v1development/profiles");
-}
-
 #else
-
-std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
-    const std::string& /*base_url*/) {
   return nullptr;
+#endif
 }
-
-#endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
 }  // namespace esp_opentelemetry
 

@@ -20,17 +20,15 @@ class OstreamProfilesExporter final : public ProfilesExporter {
 
 }  // namespace
 
-std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
-  return std::make_unique<OstreamProfilesExporter>();
-}
-
-#else
-
-std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
+
+std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+  return std::make_unique<OstreamProfilesExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 }  // namespace esp_opentelemetry
 

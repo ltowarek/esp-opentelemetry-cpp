@@ -100,17 +100,15 @@ class EspLogSpanExporter final : public trace_sdk::SpanExporter {
 
 }  // namespace
 
-std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter() {
-  return std::make_unique<EspLogSpanExporter>();
-}
-
-#else
-
-std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
+
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeEspLogSpanExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+  return std::make_unique<EspLogSpanExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
 
@@ -148,17 +146,15 @@ class EspLogLogRecordExporter final : public sdk_logs::LogRecordExporter {
 
 }  // namespace
 
-std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter() {
-  return std::make_unique<EspLogLogRecordExporter>();
-}
-
-#else
-
-std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
+
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> MakeEspLogLogRecordExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+  return std::make_unique<EspLogLogRecordExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 
@@ -199,17 +195,15 @@ class EspLogMetricExporter final : public metrics_sdk::PushMetricExporter {
 
 }  // namespace
 
-std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter() {
-  return std::make_unique<EspLogMetricExporter>();
-}
-
-#else
-
-std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetricExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+  return std::make_unique<EspLogMetricExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
 
@@ -241,17 +235,15 @@ class EspLogProfilesExporter final : public ProfilesExporter {
 
 }  // namespace
 
-std::unique_ptr<ProfilesExporter> MakeEspLogProfilesExporter() {
-  return std::make_unique<EspLogProfilesExporter>();
-}
-
-#else
-
-std::unique_ptr<ProfilesExporter> MakeEspLogProfilesExporter() {
-  return nullptr;
-}
-
 #endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
+
+std::unique_ptr<ProfilesExporter> MakeEspLogProfilesExporter() {
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+  return std::make_unique<EspLogProfilesExporter>();
+#else
+  return nullptr;
+#endif
+}
 
 }  // namespace esp_opentelemetry
 
