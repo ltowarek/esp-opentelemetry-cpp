@@ -30,31 +30,27 @@ extern "C" {
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
-void observe_double(opentelemetry::metrics::ObserverResult& obs, double value) {
+void observe_double([[maybe_unused]] opentelemetry::metrics::ObserverResult& obs,
+                    [[maybe_unused]] double value) {
 #ifdef CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
   opentelemetry::nostd::get<
       opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<double>>>(obs)
       ->Observe(value);
-#else
-  (void)obs;
-  (void)value;
 #endif
 }
 
-void observe_int64(opentelemetry::metrics::ObserverResult& obs, int64_t value) {
+void observe_int64([[maybe_unused]] opentelemetry::metrics::ObserverResult& obs,
+                   [[maybe_unused]] int64_t value) {
 #ifdef CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
   opentelemetry::nostd::get<
       opentelemetry::nostd::shared_ptr<opentelemetry::metrics::ObserverResultT<int64_t>>>(obs)
       ->Observe(value);
-#else
-  (void)obs;
-  (void)value;
 #endif
 }
 
 void esp_opentelemetry_metrics_setup(
-    std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> exporter,
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> exporter,
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #ifdef CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
   if (exporter == nullptr) {
     ESP_LOGW("esp_otel_metrics", "no metric exporter supplied; metrics disabled.");
@@ -81,14 +77,11 @@ void esp_opentelemetry_metrics_setup(
   auto sdk_provider = opentelemetry::sdk::metrics::MeterProviderFactory::Create(std::move(context));
   std::shared_ptr<opentelemetry::metrics::MeterProvider> api_provider = std::move(sdk_provider);
   opentelemetry::sdk::metrics::Provider::SetMeterProvider(api_provider);
-#else
-  (void)exporter;
-  (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 }
 
 void esp_opentelemetry_metrics_setup(
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
   const char* metrics_base = CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL;
@@ -98,7 +91,5 @@ void esp_opentelemetry_metrics_setup(
   }
   esp_opentelemetry_metrics_setup(
       esp_opentelemetry::MakeOtlpHttpMetricExporter(metrics_base), resource_attrs);
-#else
-  (void)resource_attrs;
 #endif
 }

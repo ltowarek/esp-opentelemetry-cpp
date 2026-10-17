@@ -97,8 +97,8 @@ struct ReentryGuard {
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
 void esp_opentelemetry_logs_setup(
-    std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter,
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter> exporter,
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   if (exporter == nullptr) {
     ESP_LOGW(TAG, "no log record exporter supplied; logs disabled.");
@@ -119,15 +119,12 @@ void esp_opentelemetry_logs_setup(
   }
 
   esp_opentelemetry_logs_setup(std::move(processor), std::move(resource_attrs));
-#else
-  (void)exporter;
-  (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 }
 
 void esp_opentelemetry_logs_setup(
-    std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor> processor,
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] std::unique_ptr<opentelemetry::sdk::logs::LogRecordProcessor> processor,
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   if (processor == nullptr) {
     ESP_LOGW(TAG, "no log record processor supplied; logs disabled.");
@@ -145,14 +142,11 @@ void esp_opentelemetry_logs_setup(
   sdk_logs::Provider::SetLoggerProvider(api_provider);
 
   ESP_LOGI(TAG, "OpenTelemetry logs enabled");
-#else
-  (void)processor;
-  (void)resource_attrs;
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 }
 
 void esp_opentelemetry_logs_setup(
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
   const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL;
@@ -162,8 +156,6 @@ void esp_opentelemetry_logs_setup(
   }
   esp_opentelemetry_logs_setup(
       esp_opentelemetry::MakeOtlpHttpLogRecordExporter(endpoint), resource_attrs);
-#else
-  (void)resource_attrs;
 #endif
 }
 
@@ -208,11 +200,12 @@ void write_console(esp_log_level_t level, const char* tag, const char* body) {
 }  // namespace
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 
-extern "C" void esp_opentelemetry_log_and_emit(esp_log_level_t level,
-                                               const char* tag,
-                                               const char* file, int line,
-                                               const char* function,
-                                               const char* format, ...) {
+extern "C" void esp_opentelemetry_log_and_emit([[maybe_unused]] esp_log_level_t level,
+                                               [[maybe_unused]] const char* tag,
+                                               [[maybe_unused]] const char* file,
+                                               [[maybe_unused]] int line,
+                                               [[maybe_unused]] const char* function,
+                                               [[maybe_unused]] const char* format, ...) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   char body[CONFIG_ESP_OPENTELEMETRY_LOGS_MAX_BODY_LEN];
   va_list args;
@@ -246,12 +239,5 @@ extern "C" void esp_opentelemetry_log_and_emit(esp_log_level_t level,
            {"code.filepath", file},
            {"code.lineno", static_cast<int32_t>(line)},
            {"code.function", function}}));
-#else
-  (void)level;
-  (void)tag;
-  (void)file;
-  (void)line;
-  (void)function;
-  (void)format;
 #endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
 }
