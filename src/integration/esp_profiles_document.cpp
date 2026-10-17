@@ -3,10 +3,10 @@
 // opentelemetry-cpp has no profiles SDK, so — unlike the trace/metric exporters
 // that drive the vendored SDK — this writes the ProfilesData document directly.
 // It uses the same OTLP/JSON wire form as the other signals and lives here so
-// all OTLP signal emission stays in one component. Where the
-// document goes is the application's choice, through the ProfilesExporter it
-// installs (esp_profiles_exporter.hpp) - the stand-in for the exporter
-// interface opentelemetry-cpp has for every other signal.
+// all OTLP signal emission stays in one component. Where the document goes is
+// the application's choice, through the ProfilesExporter it installs
+// (esp_profiles_exporter.hpp) - the stand-in for the exporter interface
+// opentelemetry-cpp has for every other signal.
 
 // Only compiled when CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED (see
 // CMakeLists.txt) — export_profiles()'s only caller (esp_profiling.cpp) is
@@ -84,6 +84,35 @@ std::string span_id_hex(const uint8_t (&span_id)[8]) {
   return std::string(buf, sizeof(buf));
 }
 
+// FreeRTOS task names are arbitrary bytes, and json_generator fails the whole
+// document on a string that is not UTF-8; such a name keeps its ASCII bytes.
+std::string thread_name(const char* task_name) {
+  if (task_name == nullptr) {
+    return "?";
+  }
+  json_gen_str_t probe;
+  json_gen_str_start_measure(&probe);
+  json_gen_start_array(&probe);
+  json_gen_arr_set_string(&probe, task_name);
+  json_gen_end_array(&probe);
+  std::string name(task_name);
+  if (json_gen_str_end(&probe) < 0) {
+    for (char& c : name) {
+      if (static_cast<unsigned char>(c) >= 0x80) {
+        c = '?';
+      }
+    }
+  }
+  return name;
+}
+
+struct Sample {
+  // Into Document::stack_locations; the stack's depth gives the length.
+  std::size_t first_location;
+  std::array<int, 2> attribute_indices;
+  int attribute_count;
+};
+
 // Every string, location and attribute the samples refer to, resolved to its
 // index before anything is written: the samples come before the dictionary
 // they point into.
@@ -94,73 +123,84 @@ struct Document {
   std::vector<uint32_t> locations;
   std::vector<std::pair<int, std::string>> attributes;
   std::vector<int> stack_locations;
-  std::vector<std::array<int, 2>> sample_attributes;
-  std::vector<int> sample_attribute_counts;
+  std::vector<Sample> samples;
   std::string time_unix_nano;
   std::string duration_nano;
   std::string profile_id;
 };
 
-Document resolve(const ProfileStack* stacks, std::size_t count, int64_t time_unix_nano,
-                 int64_t duration_nano) {
-  Document doc;
-  doc.stacks = stacks;
-  doc.count = count;
-  doc.time_unix_nano = std::to_string(time_unix_nano);
-  doc.duration_nano = std::to_string(duration_nano);
-  doc.profile_id = random_profile_id();
+class Resolver {
+ public:
+  Resolver(const ProfileStack* stacks, std::size_t count, int64_t time_unix_nano,
+           int64_t duration_nano) {
+    doc_.stacks = stacks;
+    doc_.count = count;
+    doc_.time_unix_nano = std::to_string(time_unix_nano);
+    doc_.duration_nano = std::to_string(duration_nano);
+    doc_.profile_id = random_profile_id();
+    const esp_app_desc_t* app = esp_app_get_description();
+    doc_.attributes.emplace_back(kStrBuildId,
+                                 hex(app->app_elf_sha256, sizeof(app->app_elf_sha256)));
+  }
 
-  auto intern = [&](const std::string& s) -> int {
-    for (size_t i = 0; i < doc.strings.size(); ++i) {
-      if (doc.strings[i] == s) return static_cast<int>(i);
+  Document resolve() && {
+    doc_.samples.reserve(doc_.count);
+    for (std::size_t i = 0; i < doc_.count; ++i) {
+      add_sample(doc_.stacks[i]);
     }
-    doc.strings.push_back(s);
-    return static_cast<int>(doc.strings.size() - 1);
-  };
+    return std::move(doc_);
+  }
 
-  std::unordered_map<uint32_t, int> addr_index;
-  auto location_for = [&](uint32_t addr) -> int {
-    auto it = addr_index.find(addr);
-    if (it != addr_index.end()) return it->second;
-    int idx = static_cast<int>(doc.locations.size());
-    addr_index.emplace(addr, idx);
-    doc.locations.push_back(addr);
-    return idx;
-  };
-
-  const esp_app_desc_t* app = esp_app_get_description();
-  doc.attributes.emplace_back(kStrBuildId,
-                              hex(app->app_elf_sha256, sizeof(app->app_elf_sha256)));
-  std::unordered_map<std::string, int> attr_index;
+ private:
   // Pyroscope turns sample attributes into labels and requires valid
   // Prometheus label names (no dots): thread_name, not thread.name. The
   // span_id attribute is what feeds Pyroscope's span-profiles API (the OTLP
   // link_table is ignored by Pyroscope 1.18.1, so no links are emitted).
-  auto attr_for = [&](const char* key, const std::string& value) -> int {
-    std::string dedupe_key = std::string(key) + "\x1f" + value;
-    auto it = attr_index.find(dedupe_key);
-    if (it != attr_index.end()) return it->second;
-    int idx = static_cast<int>(doc.attributes.size());
-    doc.attributes.emplace_back(intern(key), value);
-    attr_index.emplace(std::move(dedupe_key), idx);
-    return idx;
-  };
-
-  doc.sample_attributes.resize(count);
-  doc.sample_attribute_counts.resize(count);
-  for (std::size_t i = 0; i < count; ++i) {
-    const ProfileStack& s = stacks[i];
-    for (int d = 0; d < s.depth; ++d) {
-      doc.stack_locations.push_back(location_for(s.addresses[d]));
+  void add_sample(const ProfileStack& stack) {
+    Sample sample = {doc_.stack_locations.size(), {}, 0};
+    for (int d = 0; d < stack.depth; ++d) {
+      doc_.stack_locations.push_back(location_for(stack.addresses[d]));
     }
-    int& n = doc.sample_attribute_counts[i];
-    doc.sample_attributes[i][n++] = attr_for("thread_name", s.task_name ? s.task_name : "?");
-    if (s.has_span) {
-      doc.sample_attributes[i][n++] = attr_for("span_id", span_id_hex(s.span_id));
+    sample.attribute_indices[sample.attribute_count++] =
+        attribute_for("thread_name", thread_name(stack.task_name));
+    if (stack.has_span) {
+      sample.attribute_indices[sample.attribute_count++] =
+          attribute_for("span_id", span_id_hex(stack.span_id));
     }
+    doc_.samples.push_back(sample);
   }
-  return doc;
-}
+
+  int intern(const std::string& s) {
+    for (size_t i = 0; i < doc_.strings.size(); ++i) {
+      if (doc_.strings[i] == s) return static_cast<int>(i);
+    }
+    doc_.strings.push_back(s);
+    return static_cast<int>(doc_.strings.size() - 1);
+  }
+
+  int location_for(uint32_t addr) {
+    auto it = location_index_.find(addr);
+    if (it != location_index_.end()) return it->second;
+    int idx = static_cast<int>(doc_.locations.size());
+    location_index_.emplace(addr, idx);
+    doc_.locations.push_back(addr);
+    return idx;
+  }
+
+  int attribute_for(const char* key, const std::string& value) {
+    std::string dedupe_key = std::string(key) + "\x1f" + value;
+    auto it = attribute_index_.find(dedupe_key);
+    if (it != attribute_index_.end()) return it->second;
+    int idx = static_cast<int>(doc_.attributes.size());
+    doc_.attributes.emplace_back(intern(key), value);
+    attribute_index_.emplace(std::move(dedupe_key), idx);
+    return idx;
+  }
+
+  Document doc_;
+  std::unordered_map<uint32_t, int> location_index_;
+  std::unordered_map<std::string, int> attribute_index_;
+};
 
 void write_string_value(json_gen_str_t* j, const char* name, const char* s) {
   json_gen_push_object(j, name);
@@ -168,24 +208,29 @@ void write_string_value(json_gen_str_t* j, const char* name, const char* s) {
   json_gen_pop_object(j);
 }
 
-// Dotless keys, matching Grafana's convention; empty value omits the attribute.
 void write_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
-  if (value == nullptr || value[0] == '\0') {
-    return;
-  }
   json_gen_start_object(j);
   json_gen_obj_set_string(j, "key", key);
   write_string_value(j, "value", value);
   json_gen_end_object(j);
 }
 
+// Dotless keys, matching Grafana's convention; empty value omits the attribute.
+void write_optional_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
+  if (value != nullptr && value[0] != '\0') {
+    write_resource_attribute(j, key, value);
+  }
+}
+
 void write_resource(json_gen_str_t* j) {
   json_gen_push_object(j, "resource");
   json_gen_push_array(j, "attributes");
   write_resource_attribute(j, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
-  write_resource_attribute(j, "service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
-  write_resource_attribute(j, "service_git_ref", esp_opentelemetry::current_git_ref());
-  write_resource_attribute(j, "service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
+  write_optional_resource_attribute(j, "service_repository",
+                                    CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
+  write_optional_resource_attribute(j, "service_git_ref", esp_opentelemetry::current_git_ref());
+  write_optional_resource_attribute(j, "service_root_path",
+                                    CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
   json_gen_pop_array(j);
   json_gen_pop_object(j);
 }
@@ -208,8 +253,9 @@ void write_profile(json_gen_str_t* j, const Document& doc) {
     json_gen_arr_set_string(j, std::to_string(doc.stacks[i].count).c_str());
     json_gen_pop_array(j);
     json_gen_push_array(j, "attributeIndices");
-    for (int a = 0; a < doc.sample_attribute_counts[i]; ++a) {
-      json_gen_arr_set_int(j, doc.sample_attributes[i][a]);
+    const Sample& sample = doc.samples[i];
+    for (int a = 0; a < sample.attribute_count; ++a) {
+      json_gen_arr_set_int(j, sample.attribute_indices[a]);
     }
     json_gen_pop_array(j);
     json_gen_end_object(j);
@@ -259,12 +305,12 @@ void write_dictionary(json_gen_str_t* j, const Document& doc) {
   json_gen_pop_array(j);
 
   json_gen_push_array(j, "stackTable");
-  std::size_t next_location = 0;
   for (std::size_t i = 0; i < doc.count; ++i) {
     json_gen_start_object(j);
     json_gen_push_array(j, "locationIndices");
+    const std::size_t first = doc.samples[i].first_location;
     for (int d = 0; d < doc.stacks[i].depth; ++d) {
-      json_gen_arr_set_int(j, doc.stack_locations[next_location++]);
+      json_gen_arr_set_int(j, doc.stack_locations[first + d]);
     }
     json_gen_pop_array(j);
     json_gen_end_object(j);
@@ -312,7 +358,7 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   if (g_exporter == nullptr || count == 0) {
     return;
   }
-  const Document doc = resolve(stacks, count, time_unix_nano, duration_nano);
+  const Document doc = Resolver(stacks, count, time_unix_nano, duration_nano).resolve();
 
   json_gen_str_t jstr;
   json_gen_str_start_measure(&jstr);
