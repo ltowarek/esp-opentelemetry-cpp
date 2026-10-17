@@ -40,7 +40,8 @@ class ProfilesExporter {
 // Prints each document between PROFILE_JSON_BEGIN / PROFILE_JSON_END markers.
 // Profiles have no human-readable renderer, so this is the raw JSON. The other
 // signals get their ostream exporters from the SDK; this one has no SDK to get
-// it from.
+// it from. Returns nullptr with profiling disabled, like every other
+// profiles factory.
 std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter();
 #endif
 

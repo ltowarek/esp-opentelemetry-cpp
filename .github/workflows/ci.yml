@@ -65,6 +65,9 @@ jobs:
           - project: signals disabled test
             path: test/signals_disabled
             qemu: true
+          - project: profiling only test
+            path: test/profiling_only
+            qemu: true
           - project: otlp example
             path: examples/otlp
           - project: jtag example

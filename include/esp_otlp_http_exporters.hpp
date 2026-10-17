@@ -42,9 +42,7 @@ MakeOtlpHttpLogRecordExporter(const std::string& base_url);
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
 MakeOtlpHttpMetricExporter(const std::string& base_url);
 
-// base_url is the symbolizer root; "/v1development/profiles" is appended. Not
-// gated on the profiling signal: this is a transport for a JSON document, not
-// a hook into the profiler.
+// base_url is the symbolizer root; "/v1development/profiles" is appended.
 std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
     const std::string& base_url);
 

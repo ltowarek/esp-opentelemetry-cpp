@@ -6,6 +6,8 @@
 
 namespace esp_opentelemetry {
 
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+
 namespace {
 
 class OstreamProfilesExporter final : public ProfilesExporter {
@@ -21,6 +23,14 @@ class OstreamProfilesExporter final : public ProfilesExporter {
 std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
   return std::make_unique<OstreamProfilesExporter>();
 }
+
+#else
+
+std::unique_ptr<ProfilesExporter> MakeOstreamProfilesExporter() {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
 }  // namespace esp_opentelemetry
 

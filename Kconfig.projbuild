@@ -281,4 +281,12 @@ menu "OpenTelemetry"
             Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is
             appended automatically. Required when metrics are enabled; when
             empty, metrics export stays disabled.
+
+    config ESP_OPENTELEMETRY_SDK_ENABLED
+        bool
+        default y if ESP_OPENTELEMETRY_TRACING_ENABLED || ESP_OPENTELEMETRY_METRICS_ENABLED || ESP_OPENTELEMETRY_LOGS_ENABLED
+        help
+            Set when tracing, metrics or logs is enabled: those are the
+            signals that compile the opentelemetry-cpp SDK. Profiling does
+            not use the SDK.
 endmenu

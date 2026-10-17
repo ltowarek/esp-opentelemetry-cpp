@@ -2,8 +2,7 @@
 
 #if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
 
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED) || \
-    defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED) || defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+#if defined(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
 #include "esp_http_client_transport.hpp"
 #endif
 
@@ -30,12 +29,10 @@ extern "C" {
 
 namespace esp_opentelemetry {
 
+#if defined(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
+
 namespace {
 
-constexpr const char* kProfilesTag = "esp_otel_profiles";
-
-#if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED) || \
-    defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED) || defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
 namespace otlp_api = opentelemetry::exporter::otlp;
 
 // JSON with hex trace/span ids, matching what the collector's OTLP/HTTP
@@ -51,46 +48,72 @@ void ApplyCommon(Options& options, const std::string& url) {
   options.timeout            = std::chrono::seconds(10);
   options.compression        = "none";
 }
-#endif
 
 }  // namespace
 
-std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
-    [[maybe_unused]] const std::string& base_url) {
+#endif  // CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED
+
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
+
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
+    const std::string& base_url) {
   otlp_api::OtlpHttpExporterOptions options;
   ApplyCommon(options, base_url + "/v1/traces");
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(options, MakeEspHttpClient()));
-#else
-  return nullptr;
-#endif
 }
 
-std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
-MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
+#else
+
+std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
+    const std::string& /*base_url*/) {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
+
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
+
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
+MakeOtlpHttpLogRecordExporter(const std::string& base_url) {
   otlp_api::OtlpHttpLogRecordExporterOptions options;
   ApplyCommon(options, base_url + "/v1/logs");
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpHttpLogRecordExporter(options, MakeEspHttpClient()));
-#else
-  return nullptr;
-#endif
 }
 
-std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
-MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& base_url) {
+#else
+
+std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
+MakeOtlpHttpLogRecordExporter(const std::string& /*base_url*/) {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED
+
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
+
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
+MakeOtlpHttpMetricExporter(const std::string& base_url) {
   otlp_api::OtlpHttpMetricExporterOptions options;
   ApplyCommon(options, base_url + "/v1/metrics");
   return otlp_api::OtlpHttpMetricExporterFactory::Create(options, MakeEspHttpClient());
-#else
-  return nullptr;
-#endif
 }
 
+#else
+
+std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
+MakeOtlpHttpMetricExporter(const std::string& /*base_url*/) {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
+
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+
 namespace {
+
+constexpr const char* kProfilesTag = "esp_otel_profiles";
 
 class OtlpHttpProfilesExporter final : public ProfilesExporter {
  public:
@@ -136,6 +159,15 @@ std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
   return std::make_unique<OtlpHttpProfilesExporter>(base_url +
                                                     "/v1development/profiles");
 }
+
+#else
+
+std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
+    const std::string& /*base_url*/) {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
 }  // namespace esp_opentelemetry
 

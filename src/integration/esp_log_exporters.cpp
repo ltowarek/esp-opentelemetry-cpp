@@ -33,19 +33,6 @@ namespace {
 constexpr const char* kSpanTag = "otel.span";
 constexpr const char* kLogTag = "otel.log";
 constexpr const char* kMetricTag = "otel.metric";
-constexpr const char* kProfileTag = "otel.profile";
-
-// Checked before formatting a profile document (the one signal this file
-// still formats itself): the compile-time cap (this translation unit's
-// LOG_LOCAL_LEVEL, i.e. CONFIG_LOG_MAXIMUM_LEVEL) and the runtime tag level,
-// the same two gates esp_log itself applies.
-bool ShouldEspLog(const char* tag, esp_log_level_t level) {
-  if (LOG_LOCAL_LEVEL < static_cast<int>(level)) {
-    return false;
-  }
-  return esp_log_level_get(tag) >= level;
-}
-
 // Stands in for std::cout for an Ostream exporter: every character the
 // exporter writes is buffered here and, on '\n', flushed as one ESP_LOGI call
 // under `tag`. The Ostream exporters have no per-item level to carry through
@@ -224,7 +211,22 @@ std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter> MakeEspLogMetri
 
 #endif  // CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED
 
+#if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
+
 namespace {
+
+constexpr const char* kProfileTag = "otel.profile";
+
+// Checked before formatting a profile document (the one signal this file
+// still formats itself): the compile-time cap (this translation unit's
+// LOG_LOCAL_LEVEL, i.e. CONFIG_LOG_MAXIMUM_LEVEL) and the runtime tag level,
+// the same two gates esp_log itself applies.
+bool ShouldEspLog(const char* tag, esp_log_level_t level) {
+  if (LOG_LOCAL_LEVEL < static_cast<int>(level)) {
+    return false;
+  }
+  return esp_log_level_get(tag) >= level;
+}
 
 class EspLogProfilesExporter final : public ProfilesExporter {
  public:
@@ -242,6 +244,14 @@ class EspLogProfilesExporter final : public ProfilesExporter {
 std::unique_ptr<ProfilesExporter> MakeEspLogProfilesExporter() {
   return std::make_unique<EspLogProfilesExporter>();
 }
+
+#else
+
+std::unique_ptr<ProfilesExporter> MakeEspLogProfilesExporter() {
+  return nullptr;
+}
+
+#endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
 }  // namespace esp_opentelemetry
 
