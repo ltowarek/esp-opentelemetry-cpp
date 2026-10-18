@@ -91,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b""
         try:
             profiles = json.loads(raw)
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             log.warning("rejecting non-JSON profiles payload: %s", exc)
             self._send(400, b'{"error":"invalid JSON"}')
             return
