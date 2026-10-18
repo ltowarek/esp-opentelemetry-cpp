@@ -29,6 +29,7 @@ extern "C" {
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/trace/span_id.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <memory>
@@ -108,6 +109,22 @@ Utf8Lead utf8_lead(unsigned char byte) {
   return {0, 0, 0};
 }
 
+// How many bytes of the sequence that `lead` starts are well-formed, out of
+// the `available` bytes from its lead byte on.
+int matched_length(const unsigned char* bytes, int available, Utf8Lead lead) {
+  if (lead.length == 0) {
+    return 0;
+  }
+  for (int matched = 1; matched < lead.length && matched < available; ++matched) {
+    const unsigned char min = matched == 1 ? lead.second_min : 0x80;
+    const unsigned char max = matched == 1 ? lead.second_max : 0xBF;
+    if (bytes[matched] < min || bytes[matched] > max) {
+      return matched;
+    }
+  }
+  return std::min(lead.length, available);
+}
+
 // JSON strings must be UTF-8, and json_generator fails the whole document on
 // one that is not. Each ill-formed sequence becomes one U+FFFD, as Unicode
 // recommends. A character left incomplete at the end is dropped instead:
@@ -117,17 +134,9 @@ std::string to_utf8(const char* text) {
   const int size = static_cast<int>(std::strlen(text));
   std::string utf8;
   utf8.reserve(static_cast<std::size_t>(size));
-  int consumed = 0;
-  for (int i = 0; i < size; i += consumed) {
+  for (int i = 0; i < size;) {
     const Utf8Lead lead = utf8_lead(bytes[i]);
-    int matched = lead.length > 0 ? 1 : 0;
-    for (; matched < lead.length && i + matched < size; ++matched) {
-      const unsigned char min = matched == 1 ? lead.second_min : 0x80;
-      const unsigned char max = matched == 1 ? lead.second_max : 0xBF;
-      if (bytes[i + matched] < min || bytes[i + matched] > max) {
-        break;
-      }
-    }
+    const int matched = matched_length(bytes + i, size - i, lead);
     if (lead.length > 0 && matched == lead.length) {
       utf8.append(text + i, static_cast<std::size_t>(matched));
     } else if (lead.length > 0 && i + matched == size) {
@@ -135,7 +144,7 @@ std::string to_utf8(const char* text) {
     } else {
       utf8 += kReplacementCharacter;
     }
-    consumed = matched > 0 ? matched : 1;
+    i += matched > 0 ? matched : 1;
   }
   return utf8;
 }
