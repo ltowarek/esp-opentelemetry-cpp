@@ -24,6 +24,7 @@ extern "C" {
 #include <memory>
 #include <mutex>
 #include <new>
+#include <string>
 
 namespace {
 
@@ -119,6 +120,30 @@ Json parse_worst_case_export() {
   return parse_body();
 }
 
+Json export_task(const char* task_name) {
+  esp_opentelemetry::ProfileStack stack = g_stacks[0];
+  stack.task_name = task_name;
+  heap_caps_free(g_body);
+  g_body = nullptr;
+  esp_opentelemetry::export_profiles(&stack, 1, kTimeUnixNano, kDurationNano);
+  return parse_body();
+}
+
+// The document holds one stack, so its only thread_name attribute is that stack's.
+std::string exported_thread_name(const cJSON* root) {
+  const cJSON* dictionary = cJSON_GetObjectItemCaseSensitive(root, "dictionary");
+  const cJSON* strings = cJSON_GetObjectItemCaseSensitive(dictionary, "stringTable");
+  const cJSON* attribute = nullptr;
+  cJSON_ArrayForEach(attribute, cJSON_GetObjectItemCaseSensitive(dictionary, "attributeTable")) {
+    const int key = cJSON_GetObjectItemCaseSensitive(attribute, "keyStrindex")->valueint;
+    if (std::strcmp(cJSON_GetArrayItem(strings, key)->valuestring, "thread_name") == 0) {
+      const cJSON* value = cJSON_GetObjectItemCaseSensitive(attribute, "value");
+      return cJSON_GetObjectItemCaseSensitive(value, "stringValue")->valuestring;
+    }
+  }
+  return "";
+}
+
 size_t json_array_size(const cJSON* root, const char* table) {
   const cJSON* dictionary = cJSON_GetObjectItemCaseSensitive(root, "dictionary");
   return static_cast<size_t>(
@@ -154,14 +179,23 @@ void test_export_writes_one_location_per_distinct_address() {
                            json_array_size(parse_worst_case_export().get(), "locationTable"));
 }
 
-// FreeRTOS task names are arbitrary bytes; JSON strings must be UTF-8.
-void test_export_survives_a_task_name_that_is_not_utf8() {
-  esp_opentelemetry::ProfileStack stack = g_stacks[0];
-  stack.task_name = "bad\xff";
-  heap_caps_free(g_body);
-  g_body = nullptr;
-  esp_opentelemetry::export_profiles(&stack, 1, kTimeUnixNano, kDurationNano);
-  TEST_ASSERT_NOT_NULL(parse_body().get());
+// FreeRTOS cuts a task name at CONFIG_FREERTOS_MAX_TASK_NAME_LEN - 1 bytes,
+// which can fall inside a multi-byte character.
+void test_task_name_cut_mid_character_keeps_its_whole_characters() {
+  TEST_ASSERT_EQUAL_STRING(
+      "w\xc4\x85tek_kamery_",
+      exported_thread_name(export_task("w\xc4\x85tek_kamery_\xc5").get()).c_str());
+}
+
+void test_task_name_ending_in_a_whole_multibyte_character_is_unchanged() {
+  TEST_ASSERT_EQUAL_STRING("kamera_\xc5\x82",
+                           exported_thread_name(export_task("kamera_\xc5\x82").get()).c_str());
+}
+
+// Task names are arbitrary bytes; JSON strings must be UTF-8.
+void test_task_name_byte_that_is_not_utf8_becomes_a_replacement_character() {
+  TEST_ASSERT_EQUAL_STRING("kamera_\xc5\x82\xef\xbf\xbd",
+                           exported_thread_name(export_task("kamera_\xc5\x82\xff").get()).c_str());
 }
 
 }  // namespace
@@ -182,6 +216,8 @@ extern "C" void app_main() {
   RUN_TEST(test_export_document_is_json);
   RUN_TEST(test_export_writes_one_stack_per_aggregate);
   RUN_TEST(test_export_writes_one_location_per_distinct_address);
-  RUN_TEST(test_export_survives_a_task_name_that_is_not_utf8);
+  RUN_TEST(test_task_name_cut_mid_character_keeps_its_whole_characters);
+  RUN_TEST(test_task_name_ending_in_a_whole_multibyte_character_is_unchanged);
+  RUN_TEST(test_task_name_byte_that_is_not_utf8_becomes_a_replacement_character);
   UNITY_END();
 }

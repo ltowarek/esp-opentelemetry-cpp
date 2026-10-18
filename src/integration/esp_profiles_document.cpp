@@ -30,6 +30,7 @@ extern "C" {
 #include "opentelemetry/trace/span_id.h"
 
 #include <array>
+#include <cstring>
 #include <memory>
 #include <utility>
 #include <string>
@@ -84,26 +85,63 @@ std::string span_id_hex(const uint8_t (&span_id)[8]) {
   return std::string(buf, sizeof(buf));
 }
 
-// FreeRTOS task names are arbitrary bytes, and json_generator fails the whole
-// document on a string that is not UTF-8; such a name keeps its ASCII bytes.
-std::string thread_name(const char* task_name) {
-  if (task_name == nullptr) {
-    return "?";
-  }
-  json_gen_str_t probe;
-  json_gen_str_start_measure(&probe);
-  json_gen_start_array(&probe);
-  json_gen_arr_set_string(&probe, task_name);
-  json_gen_end_array(&probe);
-  std::string name(task_name);
-  if (json_gen_str_end(&probe) < 0) {
-    for (char& c : name) {
-      if (static_cast<unsigned char>(c) >= 0x80) {
-        c = '?';
+constexpr const char* kReplacementCharacter = "\xEF\xBF\xBD";  // U+FFFD
+
+// A well-formed sequence's length and the range its second byte must fall in;
+// the bytes after it are always 0x80..0xBF (Unicode Table 3-7). A length of 0
+// marks a byte that cannot start a sequence.
+struct Utf8Lead {
+  int length;
+  unsigned char second_min;
+  unsigned char second_max;
+};
+
+Utf8Lead utf8_lead(unsigned char byte) {
+  if (byte < 0x80) return {1, 0, 0};
+  if (byte >= 0xC2 && byte <= 0xDF) return {2, 0x80, 0xBF};
+  if (byte == 0xE0) return {3, 0xA0, 0xBF};
+  if (byte == 0xED) return {3, 0x80, 0x9F};
+  if (byte >= 0xE1 && byte <= 0xEF) return {3, 0x80, 0xBF};
+  if (byte == 0xF0) return {4, 0x90, 0xBF};
+  if (byte >= 0xF1 && byte <= 0xF3) return {4, 0x80, 0xBF};
+  if (byte == 0xF4) return {4, 0x80, 0x8F};
+  return {0, 0, 0};
+}
+
+// JSON strings must be UTF-8, and json_generator fails the whole document on
+// one that is not. Each ill-formed sequence becomes one U+FFFD, as Unicode
+// recommends. A character left incomplete at the end is dropped instead:
+// FreeRTOS truncates task names by bytes, which can cut a character in half.
+std::string to_utf8(const char* text) {
+  const auto* bytes = reinterpret_cast<const unsigned char*>(text);
+  const int size = static_cast<int>(std::strlen(text));
+  std::string utf8;
+  utf8.reserve(static_cast<std::size_t>(size));
+  int consumed = 0;
+  for (int i = 0; i < size; i += consumed) {
+    const Utf8Lead lead = utf8_lead(bytes[i]);
+    int matched = lead.length > 0 ? 1 : 0;
+    for (; matched < lead.length && i + matched < size; ++matched) {
+      const unsigned char min = matched == 1 ? lead.second_min : 0x80;
+      const unsigned char max = matched == 1 ? lead.second_max : 0xBF;
+      if (bytes[i + matched] < min || bytes[i + matched] > max) {
+        break;
       }
     }
+    if (lead.length > 0 && matched == lead.length) {
+      utf8.append(text + i, static_cast<std::size_t>(matched));
+    } else if (lead.length > 0 && i + matched == size) {
+      break;
+    } else {
+      utf8 += kReplacementCharacter;
+    }
+    consumed = matched > 0 ? matched : 1;
   }
-  return name;
+  return utf8;
+}
+
+std::string thread_name(const char* task_name) {
+  return task_name == nullptr ? "?" : to_utf8(task_name);
 }
 
 struct Sample {
