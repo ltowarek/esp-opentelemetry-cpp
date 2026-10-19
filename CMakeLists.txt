@@ -218,6 +218,18 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
         EXCLUDE_FROM_ALL
     )
 
+    # The SDK validates instrument names and units with std::regex, whose
+    # matcher recurses per character and overflows small task stacks (issue #141).
+    get_target_property(_esp_otel_metrics_sources opentelemetry_metrics SOURCES)
+    if(NOT "instrument_metadata_validator.cc" IN_LIST _esp_otel_metrics_sources)
+        message(FATAL_ERROR "opentelemetry_metrics no longer lists "
+            "instrument_metadata_validator.cc; revisit the #141 workaround")
+    endif()
+    list(REMOVE_ITEM _esp_otel_metrics_sources instrument_metadata_validator.cc)
+    list(APPEND _esp_otel_metrics_sources
+        "${CMAKE_CURRENT_LIST_DIR}/src/workarounds/instrument_metadata_validator.cc")
+    set_property(TARGET opentelemetry_metrics PROPERTY SOURCES ${_esp_otel_metrics_sources})
+
     if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
         # Same int32_t-as-long fix the protobuf setup applies to Abseil
         # and libprotobuf. opentelemetry-cpp instantiates RepeatedField<int>

@@ -68,6 +68,9 @@ jobs:
           - project: profiling only test
             path: test/profiling_only
             qemu: true
+          - project: max length instrument metadata on small stack test
+            path: test/max_length_instrument_metadata_on_small_stack
+            qemu: true
           - project: otlp example
             path: examples/otlp
           - project: jtag example
