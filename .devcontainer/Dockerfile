@@ -19,7 +19,8 @@ RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
 # Ubuntu's protobuf-compiler can't generate code for the vendored protobuf
 # runtime pinned in third_party/protobuf (exact-match version guard); install
 # the matching official release instead. Needed for the examples/ builds
-# (WITH_OTLP_HTTP=ON) now that protoc comes from PATH instead of a host subbuild.
+# (OTELCPP_WITH_OTLP_HTTP=ON) now that protoc comes from PATH instead of a
+# host subbuild.
 COPY install-protoc.sh /tmp/install-protoc.sh
 RUN bash /tmp/install-protoc.sh && rm /tmp/install-protoc.sh
 
