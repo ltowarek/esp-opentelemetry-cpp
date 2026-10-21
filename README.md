@@ -181,7 +181,6 @@ Features validated on ESP32 hardware or QEMU. Untested features compile but have
 | ESP log metric exporter (`MakeEspLogMetricExporter`) | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | `PeriodicExportingMetricReader` | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | `OtlpHttpMetricExporter` | Linked | — |
-| `InstrumentSelector` regex patterns (default `kPattern`) | Untested — `std::regex` recurses once per character, so a long pattern can overflow a small task stack; prefer `kWildcard` ([open-telemetry/opentelemetry-cpp#4520](https://github.com/open-telemetry/opentelemetry-cpp/pull/4520)) | — |
 | Counter instrument (`Add`) | Tested (QEMU) | [`examples/metrics/`](examples/metrics/) |
 | Observable gauge (`AddCallback`) | Linked | — |
 | `OStreamLogRecordExporter` | Tested (QEMU) — via the ESP log exporter, which wraps it | [`examples/logs/`](examples/logs/) |
