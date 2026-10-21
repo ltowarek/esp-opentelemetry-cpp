@@ -13,7 +13,7 @@
 # vendored as submodules under third_party/ and are only built as part of
 # this component when CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP or
 # CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG selects an exporter family that
-# needs them (see WITH_OTLP_HTTP / WITH_OTLP_FILE below).
+# needs them (see OTELCPP_WITH_OTLP_HTTP / OTELCPP_WITH_OTLP_FILE below).
 
 set(ESP_OPENTELEMETRY_SRCS
     src/integration/esp_git_ref.cpp
@@ -152,51 +152,50 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     # Tune the vendored opentelemetry-cpp build for an embedded target
     # before pulling it in. These must be set *before* the
     # add_subdirectory() call so the SDK's option()/set() lines see them.
-    set(BUILD_TESTING         OFF CACHE BOOL "" FORCE)
-    set(WITH_EXAMPLES         OFF CACHE BOOL "" FORCE)
-    set(WITH_FUNC_TESTS       OFF CACHE BOOL "" FORCE)
-    set(WITH_BENCHMARK        OFF CACHE BOOL "" FORCE)
-    set(WITH_OTLP_GRPC        OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING                      OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_EXAMPLES              OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_FUNC_TESTS            OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_BENCHMARK             OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_OTLP_GRPC             OFF CACHE BOOL "" FORCE)
     # The JTAG exporters reuse the OTLP file exporters' OTLP/JSON serialisation
     # with an app-trace appender in place of a file, so each of this
     # component's exporter families maps onto one of the SDK's.
     if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG)
-        set(WITH_OTLP_FILE    ON  CACHE BOOL "" FORCE)
+        set(OTELCPP_WITH_OTLP_FILE         ON  CACHE BOOL "" FORCE)
     else()
-        set(WITH_OTLP_FILE    OFF CACHE BOOL "" FORCE)
+        set(OTELCPP_WITH_OTLP_FILE         OFF CACHE BOOL "" FORCE)
     endif()
     if(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
-        set(WITH_OTLP_HTTP    ON  CACHE BOOL "" FORCE)
+        set(OTELCPP_WITH_OTLP_HTTP         ON  CACHE BOOL "" FORCE)
     else()
-        set(WITH_OTLP_HTTP    OFF CACHE BOOL "" FORCE)
+        set(OTELCPP_WITH_OTLP_HTTP         OFF CACHE BOOL "" FORCE)
     endif()
     # opentelemetry-cpp's own CMakeLists only pulls in protobuf when one of
-    # WITH_OTLP_GRPC/HTTP/FILE is set (WITH_OTLP_GRPC is always off here), so
-    # this mirrors that same condition: materialise protobuf + Abseil only
-    # when an exporter family that needs them is selected (issue #38).
-    # Plain set(), not CACHE BOOL FORCE like the WITH_* flags above: this is
-    # derived from them within the same configure run, not read by any
+    # OTELCPP_WITH_OTLP_GRPC/HTTP/FILE is set (OTELCPP_WITH_OTLP_GRPC is
+    # always off here), so this mirrors that same condition: materialise
+    # protobuf + Abseil only when an exporter family that needs them is
+    # selected (issue #38).
+    # Plain set(), not CACHE BOOL FORCE like the OTELCPP_* flags above: this
+    # is derived from them within the same configure run, not read by any
     # add_subdirectory()'s option() calls, so it has nothing to override.
-    if(WITH_OTLP_HTTP OR WITH_OTLP_FILE)
+    if(OTELCPP_WITH_OTLP_HTTP OR OTELCPP_WITH_OTLP_FILE)
         set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF ON)
     else()
         set(ESP_OPENTELEMETRY_NEEDS_PROTOBUF OFF)
     endif()
-    set(WITH_PROMETHEUS       OFF CACHE BOOL "" FORCE)
-    set(WITH_ZIPKIN           OFF CACHE BOOL "" FORCE)
-    set(WITH_ELASTICSEARCH    OFF CACHE BOOL "" FORCE)
-    set(WITH_ETW              OFF CACHE BOOL "" FORCE)
-    set(WITH_ABSEIL           OFF CACHE BOOL "" FORCE)   # use std::variant on C++17
-    set(WITH_STL              "CXX17" CACHE STRING "" FORCE)
-    set(WITH_OTLP_HTTP_COMPRESSION OFF CACHE BOOL "" FORCE)
-    set(OPENTELEMETRY_INSTALL OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_PROMETHEUS            OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_ZIPKIN                OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_ELASTICSEARCH         OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_STL                   "CXX17" CACHE STRING "" FORCE)
+    set(OTELCPP_WITH_OTLP_HTTP_COMPRESSION OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_INSTALL                    OFF CACHE BOOL "" FORCE)
     # curl cannot be cross-compiled to Xtensa cleanly (autoprobes for
     # hostent/off_t/recv/send all fail). We provide our own
     # esp_http_client-based HttpClient via
     # esp_opentelemetry::MakeEspHttpClient(), passed directly to
     # OtlpHttpExporter's HttpClient constructor overload
     # (open-telemetry/opentelemetry-cpp#4071), so curl is never needed.
-    set(WITH_HTTP_CLIENT_CURL OFF CACHE BOOL "" FORCE)
+    set(OTELCPP_WITH_HTTP_CLIENT_CURL      OFF CACHE BOOL "" FORCE)
 
     # Materialize Abseil + libprotobuf + the synthesized Protobuf package
     # config *before* opentelemetry-cpp's CMake runs, but only when an
@@ -204,10 +203,10 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     # SDK's cmake/protobuf.cmake would fall through to FetchContent and
     # create a duplicate libprotobuf target. The include is guarded
     # inside the .cmake file so calling it again is a no-op. When neither
-    # OTLP/HTTP nor JTAG is selected, WITH_OTLP_HTTP/WITH_OTLP_FILE are both
-    # off and the SDK's own CMakeLists never looks for protobuf either, so
-    # skipping this include is what actually keeps protobuf + Abseil out of
-    # the build (issue #38).
+    # OTLP/HTTP nor JTAG is selected, OTELCPP_WITH_OTLP_HTTP and
+    # OTELCPP_WITH_OTLP_FILE are both off and the SDK's own CMakeLists never
+    # looks for protobuf either, so skipping this include is what actually
+    # keeps protobuf + Abseil out of the build (issue #38).
     if(ESP_OPENTELEMETRY_NEEDS_PROTOBUF)
         include(${CMAKE_CURRENT_LIST_DIR}/cmake/protobuf_setup.cmake)
     endif()
