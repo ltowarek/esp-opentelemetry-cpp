@@ -208,6 +208,11 @@ menu "OpenTelemetry"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default 64
 
+    config ESP_OPENTELEMETRY_BATCH_MAX_EXPORT_BATCH_SIZE
+        int "Max spans per export batch"
+        depends on ESP_OPENTELEMETRY_TRACING_ENABLED
+        default 32
+
     config ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS
         int "Batch span processor schedule delay (ms)"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
@@ -239,6 +244,11 @@ menu "OpenTelemetry"
         help
             Records emitted once the queue is full are dropped rather than
             blocking the logging call site.
+
+    config ESP_OPENTELEMETRY_LOGS_BATCH_MAX_EXPORT_BATCH_SIZE
+        int "Max log records per export batch"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default 64
 
     config ESP_OPENTELEMETRY_LOGS_BATCH_SCHEDULE_DELAY_MS
         int "Batch log record processor schedule delay (ms)"
