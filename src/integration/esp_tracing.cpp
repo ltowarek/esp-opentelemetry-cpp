@@ -59,6 +59,7 @@ void esp_opentelemetry_tracing_setup(
 
   sdk_trace::BatchSpanProcessorOptions batch_options;
   batch_options.max_queue_size        = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE;
+  batch_options.max_export_batch_size = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_EXPORT_BATCH_SIZE;
   batch_options.schedule_delay_millis =
       std::chrono::milliseconds(CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS);
 
