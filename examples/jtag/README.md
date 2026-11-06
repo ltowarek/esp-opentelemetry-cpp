@@ -1,7 +1,7 @@
 # jtag example
 
-Every signal over one JTAG app-trace channel. `main.cpp` constructs a
-`Jtag*Exporter` per signal and passes each to the matching
+Every signal over one JTAG app-trace channel. `main.cpp` calls a
+`MakeJtag*Exporter()` per signal and passes each to the matching
 `esp_opentelemetry_*_setup()` call. Each document is written as OTLP/JSON —
 the same encoding the OTLP/HTTP exporters send, one document per line — and
 OpenOCD streams the channel to a host-side forwarder that POSTs each line to

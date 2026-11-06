@@ -1,0 +1,5 @@
+menu "heap_align_cjson"
+    config HEAP_ALIGN_CJSON_UBSAN
+        bool "Build cJSON and main with -fsanitize=undefined"
+        default n
+endmenu

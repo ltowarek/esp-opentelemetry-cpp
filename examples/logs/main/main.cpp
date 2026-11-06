@@ -1,8 +1,8 @@
+#include "esp_log_exporters.hpp"
 #include "esp_opentelemetry.hpp"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "opentelemetry/exporters/ostream/log_record_exporter_factory.h"
 
 static const char *TAG = "logs-example";
 
@@ -12,7 +12,7 @@ extern "C" void app_main()
         {"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}};
 
     esp_opentelemetry_logs_setup(
-        opentelemetry::exporter::logs::OStreamLogRecordExporterFactory::Create(), resource);
+        esp_opentelemetry::MakeEspLogLogRecordExporter(), resource);
 
     auto logger = esp_opentelemetry_logger();
 

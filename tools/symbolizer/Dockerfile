@@ -1,9 +1,10 @@
 # Profiling symbolizer service. Resolves raw Xtensa firmware addresses in OTLP
 # profiles against the build ELF using xtensa-esp-elf-addr2line, taken from the
 # ESP-IDF toolchain image (the same toolchain that built the firmware).
-FROM espressif/idf:release-v6.0 AS toolchain
+# Same ESP-IDF version as .devcontainer/Dockerfile, which explains the pin.
+FROM espressif/idf:v6.1@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c AS toolchain
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 COPY --from=toolchain /opt/esp/tools/xtensa-esp-elf /opt/xtensa-esp-elf
 RUN set -eux; \
     ln -s "$(ls -d /opt/xtensa-esp-elf/*/xtensa-esp-elf/bin)/xtensa-esp-elf-addr2line" \

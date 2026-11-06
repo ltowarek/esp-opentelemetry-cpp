@@ -49,8 +49,8 @@ static constexpr const char* TAG = "esp_opentelemetry";
 #endif  // CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED
 
 void esp_opentelemetry_tracing_setup(
-    std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter,
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter,
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   if (exporter == nullptr) {
     ESP_LOGW(TAG, "no span exporter supplied; tracing disabled.");
@@ -59,6 +59,7 @@ void esp_opentelemetry_tracing_setup(
 
   sdk_trace::BatchSpanProcessorOptions batch_options;
   batch_options.max_queue_size        = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_QUEUE_SIZE;
+  batch_options.max_export_batch_size = CONFIG_ESP_OPENTELEMETRY_BATCH_MAX_EXPORT_BATCH_SIZE;
   batch_options.schedule_delay_millis =
       std::chrono::milliseconds(CONFIG_ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS);
 
@@ -71,15 +72,12 @@ void esp_opentelemetry_tracing_setup(
   }
 
   esp_opentelemetry_tracing_setup(std::move(processor), std::move(resource_attrs));
-#else
-  (void)exporter;
-  (void)resource_attrs;
 #endif
 }
 
 void esp_opentelemetry_tracing_setup(
-    std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor,
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] std::unique_ptr<opentelemetry::sdk::trace::SpanProcessor> processor,
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   if (processor == nullptr) {
     ESP_LOGW(TAG, "no span processor supplied; tracing disabled.");
@@ -103,14 +101,11 @@ void esp_opentelemetry_tracing_setup(
           new trace_api::propagation::HttpTraceContext()));
 
   ESP_LOGI(TAG, "OpenTelemetry tracing enabled");
-#else
-  (void)processor;
-  (void)resource_attrs;
 #endif
 }
 
 void esp_opentelemetry_tracing_setup(
-    opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
+    [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
   const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL;
@@ -120,8 +115,6 @@ void esp_opentelemetry_tracing_setup(
   }
   esp_opentelemetry_tracing_setup(
       esp_opentelemetry::MakeOtlpHttpSpanExporter(endpoint), resource_attrs);
-#else
-  (void)resource_attrs;
 #endif
 }
 

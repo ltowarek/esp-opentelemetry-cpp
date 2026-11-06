@@ -8,9 +8,10 @@ CONFIG_SPIRAM_MODE_OCT=y
 
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 
-# The exporters this example constructs must be compiled in; the OTLP/HTTP ones
-# are not needed here.
-CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM=y
+# The exporter this example constructs must be compiled in; the OTLP/HTTP and
+# Ostream ones are not needed here.
+CONFIG_ESP_OPENTELEMETRY_EXPORTER_ESP_LOG=y
+CONFIG_ESP_OPENTELEMETRY_EXPORTER_OSTREAM=n
 CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n
 
 # The Batch processors and the metric reader run export threads that serialise

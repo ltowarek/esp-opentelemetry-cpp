@@ -18,3 +18,18 @@ updates:
       # this submodule manually to a new release tag instead, updating
       # .devcontainer/install-protoc.sh's PROTOC_VERSION to match.
       - dependency-name: "third_party/protobuf"
+
+  # Both images build from the same ESP-IDF image (the symbolizer needs the
+  # toolchain that built the firmware), so they move together in one PR.
+  - package-ecosystem: "docker"
+    directories:
+      - "/.devcontainer"
+      - "/tools/symbolizer"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    groups:
+      esp-idf:
+        patterns:
+          - "espressif/idf"

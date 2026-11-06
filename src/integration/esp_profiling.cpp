@@ -369,8 +369,8 @@ void esp_opentelemetry_profiling_setup(
                             reinterpret_cast<void*>(c), 5, nullptr, c);
   }
 
-  // The export task builds OTLP/JSON (cJSON + std containers) and runs the HTTP
-  // client, so it needs a generous stack.
+  // The export task builds the profiles document and runs the HTTP client, so it
+  // needs a generous stack.
   xTaskCreate(export_task, "prof_export", 8192, nullptr, 1, nullptr);
 
   ESP_LOGI(TAG, "profiling started: %d Hz/core, depth %d, export every %d ms",

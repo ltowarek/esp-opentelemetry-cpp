@@ -8,7 +8,6 @@
 #include "opentelemetry/trace/scope.h"
 
 #include <cstdint>
-#include <memory>
 
 static const char *TAG = "jtag-example";
 
@@ -18,14 +17,11 @@ extern "C" void app_main()
         {"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}};
     esp_opentelemetry_tracing_setup(
         opentelemetry::sdk::trace::SimpleSpanProcessorFactory::Create(
-            std::make_unique<esp_opentelemetry::JtagSpanExporter>()),
+            esp_opentelemetry::MakeJtagSpanExporter()),
         resource);
-    esp_opentelemetry_logs_setup(
-        std::make_unique<esp_opentelemetry::JtagLogRecordExporter>(), resource);
-    esp_opentelemetry_metrics_setup(
-        std::make_unique<esp_opentelemetry::JtagMetricExporter>(), resource);
-    esp_opentelemetry_profiling_setup(
-        std::make_unique<esp_opentelemetry::JtagProfilesExporter>());
+    esp_opentelemetry_logs_setup(esp_opentelemetry::MakeJtagLogRecordExporter(), resource);
+    esp_opentelemetry_metrics_setup(esp_opentelemetry::MakeJtagMetricExporter(), resource);
+    esp_opentelemetry_profiling_setup(esp_opentelemetry::MakeJtagProfilesExporter());
 
     auto tracer  = esp_opentelemetry_tracer();
     auto logger  = esp_opentelemetry_logger();

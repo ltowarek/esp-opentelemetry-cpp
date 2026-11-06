@@ -1,4 +1,10 @@
-FROM espressif/idf:release-v6.0
+# Pinned to v6.0.3: later release/v6.0 images hang every ESP32-S3 QEMU boot.
+# Merge 1f8d24ceeb7 ("fix(usb_phy): Fixed USB PHY clock during low-power modes")
+# has USB Serial/JTAG init busy-wait on I2C_MST_BBPLL_CAL_DONE, a bit Espressif's
+# QEMU never sets (https://github.com/espressif/qemu/issues/193). Move back to
+# release-v6.0 once a QEMU release with the fix (espressif/qemu#195) is out.
+# The digest keeps the image fixed even if Docker Hub re-pushes the v6.0.3 tag.
+FROM espressif/idf:v6.1@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
@@ -13,7 +19,8 @@ RUN bash /tmp/install-gh.sh && rm /tmp/install-gh.sh
 # Ubuntu's protobuf-compiler can't generate code for the vendored protobuf
 # runtime pinned in third_party/protobuf (exact-match version guard); install
 # the matching official release instead. Needed for the examples/ builds
-# (WITH_OTLP_HTTP=ON) now that protoc comes from PATH instead of a host subbuild.
+# (OTELCPP_WITH_OTLP_HTTP=ON) now that protoc comes from PATH instead of a
+# host subbuild.
 COPY install-protoc.sh /tmp/install-protoc.sh
 RUN bash /tmp/install-protoc.sh && rm /tmp/install-protoc.sh
 

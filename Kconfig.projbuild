@@ -31,12 +31,22 @@ menu "OpenTelemetry"
             SDK's OTLP/HTTP exporter family.
 
     config ESP_OPENTELEMETRY_EXPORTER_OSTREAM
-        bool "Console (ostream) exporters"
+        bool "Ostream exporters"
         default n
         help
             Compiles the SDK's ostream exporters, which print each signal to
             stdout. Useful for bring-up and QEMU runs; the output is
             human-readable rather than OTLP, so nothing forwards it.
+
+    config ESP_OPENTELEMETRY_EXPORTER_ESP_LOG
+        bool "ESP log exporters"
+        default n
+        help
+            Compiles esp_opentelemetry::MakeEspLog*Exporter(), which print
+            each signal through esp_log under its own tag (otel.span,
+            otel.log, otel.metric, otel.profile) instead of std::cout. Pulls
+            in the corresponding Ostream exporter target(s) even when that
+            option is off. See esp_log_exporters.hpp.
 
     config ESP_OPENTELEMETRY_EXPORTER_JTAG
         bool "JTAG app-trace exporters"
@@ -90,7 +100,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL
         string "Tracing OTLP base URL (e.g. http://192.168.1.10:4318)"
-        depends on ESP_OPENTELEMETRY_TRACING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP trace export. The path "/v1/traces" is
@@ -169,7 +179,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL
         string "Profiles OTLP/HTTP endpoint (the profiling-symbolizer)"
-        depends on ESP_OPENTELEMETRY_PROFILING_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL of the profiling-symbolizer; "/v1development/profiles" is
@@ -178,6 +188,9 @@ menu "OpenTelemetry"
             them against the firmware ELF before forwarding to the collector.
             Distinct from the tracing endpoint (profiles go via the symbolizer,
             not directly to the collector). Leave empty to disable export.
+            Like every signal's base URL, it exists whether or not the signal
+            is enabled, so an application builds its exporter the same way in
+            every build.
 
     config ESP_OPENTELEMETRY_PROFILES_SPAN_ATTRIBUTE
         string "Span attribute linking spans to profiles"
@@ -194,6 +207,11 @@ menu "OpenTelemetry"
         int "Max queued spans before drop"
         depends on ESP_OPENTELEMETRY_TRACING_ENABLED
         default 64
+
+    config ESP_OPENTELEMETRY_BATCH_MAX_EXPORT_BATCH_SIZE
+        int "Max spans per export batch"
+        depends on ESP_OPENTELEMETRY_TRACING_ENABLED
+        default 32
 
     config ESP_OPENTELEMETRY_BATCH_SCHEDULE_DELAY_MS
         int "Batch span processor schedule delay (ms)"
@@ -212,7 +230,7 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL
         string "Logs OTLP base URL"
-        depends on ESP_OPENTELEMETRY_LOGS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP log export. The path "/v1/logs" is
@@ -226,6 +244,11 @@ menu "OpenTelemetry"
         help
             Records emitted once the queue is full are dropped rather than
             blocking the logging call site.
+
+    config ESP_OPENTELEMETRY_LOGS_BATCH_MAX_EXPORT_BATCH_SIZE
+        int "Max log records per export batch"
+        depends on ESP_OPENTELEMETRY_LOGS_ENABLED
+        default 64
 
     config ESP_OPENTELEMETRY_LOGS_BATCH_SCHEDULE_DELAY_MS
         int "Batch log record processor schedule delay (ms)"
@@ -262,10 +285,18 @@ menu "OpenTelemetry"
 
     config ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL
         string "Metrics OTLP base URL"
-        depends on ESP_OPENTELEMETRY_METRICS_ENABLED && ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
+        depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
             Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is
             appended automatically. Required when metrics are enabled; when
             empty, metrics export stays disabled.
+
+    config ESP_OPENTELEMETRY_SDK_ENABLED
+        bool
+        default y if ESP_OPENTELEMETRY_TRACING_ENABLED || ESP_OPENTELEMETRY_METRICS_ENABLED || ESP_OPENTELEMETRY_LOGS_ENABLED
+        help
+            Set when tracing, metrics or logs is enabled: those are the
+            signals that compile the opentelemetry-cpp SDK. Profiling does
+            not use the SDK.
 endmenu

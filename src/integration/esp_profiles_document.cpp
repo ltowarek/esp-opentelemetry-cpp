@@ -1,22 +1,12 @@
 // OpenTelemetry profiles (v1development) JSON exporter.
 //
 // opentelemetry-cpp has no profiles SDK, so — unlike the trace/metric exporters
-// that drive the vendored SDK — this builds the ProfilesData document directly
-// through esp_json_writer.hpp (cJSON-backed). It uses the same OTLP/JSON wire
-// form as the other signals and lives here so all OTLP signal emission stays
-// in one component. Where the document goes is the application's choice,
-// through the ProfilesExporter it installs (esp_profiles_exporter.hpp) - the
-// stand-in for the exporter interface opentelemetry-cpp has for every other
-// signal.
-//
-// Building the document is a two-pass affair: a JsonWriter is a token stream,
-// not a document, so it cannot have two containers open in different places
-// the way a cJSON subtree can. The dictionary tables (string/location/
-// attribute) and the per-sample stack/attribute indices are all discovered
-// while walking `stacks`, but `dictionary` is emitted after `resourceProfiles`
-// in the wire form. Pass 1 (build_tables) walks the samples once and captures
-// everything into plain vectors; pass 2 (emit_document) replays those vectors
-// through the writer in final field order.
+// that drive the vendored SDK — this writes the ProfilesData document directly.
+// It uses the same OTLP/JSON wire form as the other signals and lives here so
+// all OTLP signal emission stays in one component. Where the document goes is
+// the application's choice, through the ProfilesExporter it installs
+// (esp_profiles_exporter.hpp) - the stand-in for the exporter interface
+// opentelemetry-cpp has for every other signal.
 
 // Only compiled when CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED (see
 // CMakeLists.txt) — export_profiles()'s only caller (esp_profiling.cpp) is
@@ -28,21 +18,24 @@
 
 extern "C" {
 #include "esp_app_desc.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "json_generator.h"
 }
 
 #include "esp_git_ref.hpp"
-#include "esp_json_writer.hpp"
 #include "esp_profiles_exporter.hpp"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/trace/span_id.h"
 
-#include <cstdint>
+#include <algorithm>
+#include <array>
+#include <cstring>
 #include <memory>
+#include <utility>
 #include <string>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace esp_opentelemetry {
@@ -63,6 +56,8 @@ constexpr const char* TAG = "esp_otel_profiles";
 
 // Fixed string_table prefix; index 0 must be "".
 enum : int { kStrEmpty = 0, kStrSamples = 1, kStrCount = 2, kStrBuildId = 3 };
+// attribute_table[0], referenced by the mapping.
+constexpr int kAttrBuildId = 0;
 
 std::string hex(const uint8_t* bytes, size_t n) {
   static const char* d = "0123456789abcdef";
@@ -91,285 +86,316 @@ std::string span_id_hex(const uint8_t (&span_id)[8]) {
   return std::string(buf, sizeof(buf));
 }
 
-// One attributeTable entry: an interned key plus its (always string) value.
-struct AttributeEntry {
-  int key_strindex;
-  std::string value;
+constexpr const char* kReplacementCharacter = "\xEF\xBF\xBD";  // U+FFFD
+
+// A well-formed sequence's length and the range its second byte must fall in;
+// the bytes after it are always 0x80..0xBF (Unicode Table 3-7). A length of 0
+// marks a byte that cannot start a sequence.
+struct Utf8Lead {
+  int length;
+  unsigned char second_min;
+  unsigned char second_max;
 };
 
-// One sample plus the stackTable entry it shares an index with (stackIndex
-// in the sample refers to this entry's position in the samples/stack vector).
-struct SampleEntry {
-  std::vector<int> loc_indices;  // -> stackTable[i].locationIndices
-  uint32_t count;
-  int attr_indices[2];
-  int n_attrs;
-};
+Utf8Lead utf8_lead(unsigned char byte) {
+  if (byte < 0x80) return {1, 0, 0};
+  if (byte >= 0xC2 && byte <= 0xDF) return {2, 0x80, 0xBF};
+  if (byte == 0xE0) return {3, 0xA0, 0xBF};
+  if (byte == 0xED) return {3, 0x80, 0x9F};
+  if (byte >= 0xE1 && byte <= 0xEF) return {3, 0x80, 0xBF};
+  if (byte == 0xF0) return {4, 0x90, 0xBF};
+  if (byte >= 0xF1 && byte <= 0xF3) return {4, 0x80, 0xBF};
+  if (byte == 0xF4) return {4, 0x80, 0x8F};
+  return {0, 0, 0};
+}
 
-// Everything build_tables discovers while walking `stacks`, replayed by
-// emit_document in the document's final field order.
-struct ProfilesTables {
-  std::vector<std::string> strings = {"", "samples", "count", "process.executable.build_id"};
-  std::vector<uint32_t> location_addresses;  // locationTable, first-seen order
-  std::vector<AttributeEntry> attributes;    // attributeTable; [0] == build_id
-  std::vector<SampleEntry> samples;          // parallel to stackTable
-};
-
-ProfilesTables build_tables(const ProfileStack* stacks, std::size_t count,
-                          const std::string& build_id) {
-  ProfilesTables t;
-
-  auto intern = [&](const std::string& s) -> int {
-    for (size_t i = 0; i < t.strings.size(); ++i) {
-      if (t.strings[i] == s) return static_cast<int>(i);
+// How many bytes of the sequence that `lead` starts are well-formed, out of
+// the `available` bytes from its lead byte on.
+int matched_length(const unsigned char* bytes, int available, Utf8Lead lead) {
+  if (lead.length == 0) {
+    return 0;
+  }
+  for (int matched = 1; matched < lead.length && matched < available; ++matched) {
+    const unsigned char min = matched == 1 ? lead.second_min : 0x80;
+    const unsigned char max = matched == 1 ? lead.second_max : 0xBF;
+    if (bytes[matched] < min || bytes[matched] > max) {
+      return matched;
     }
-    t.strings.push_back(s);
-    return static_cast<int>(t.strings.size() - 1);
-  };
+  }
+  return std::min(lead.length, available);
+}
 
-  std::unordered_map<uint32_t, int> addr_index;
-  auto location_for = [&](uint32_t addr) -> int {
-    auto it = addr_index.find(addr);
-    if (it != addr_index.end()) return it->second;
-    int idx = static_cast<int>(addr_index.size());
-    addr_index.emplace(addr, idx);
-    t.location_addresses.push_back(addr);
-    return idx;
-  };
+// JSON strings must be UTF-8, and json_generator fails the whole document on
+// one that is not. Each ill-formed sequence becomes one U+FFFD, as Unicode
+// recommends. A character left incomplete at the end is dropped instead:
+// FreeRTOS truncates task names by bytes, which can cut a character in half.
+std::string to_utf8(const char* text) {
+  const auto* bytes = reinterpret_cast<const unsigned char*>(text);
+  const int size = static_cast<int>(std::strlen(text));
+  std::string utf8;
+  utf8.reserve(static_cast<std::size_t>(size));
+  for (int i = 0; i < size;) {
+    const Utf8Lead lead = utf8_lead(bytes[i]);
+    const int matched = matched_length(bytes + i, size - i, lead);
+    if (lead.length > 0 && matched == lead.length) {
+      utf8.append(text + i, static_cast<std::size_t>(matched));
+    } else if (lead.length > 0 && i + matched == size) {
+      break;
+    } else {
+      utf8 += kReplacementCharacter;
+    }
+    i += matched > 0 ? matched : 1;
+  }
+  return utf8;
+}
 
-  // attribute_table[0] = build_id (referenced by the mapping); thread_name and
-  // span_id entries follow, deduplicated and referenced per sample.
-  t.attributes.push_back(AttributeEntry{kStrBuildId, build_id});
-  std::unordered_map<std::string, int> attr_index;
-  int next_attr_idx = 1;
+std::string thread_name(const char* task_name) {
+  return task_name == nullptr ? "?" : to_utf8(task_name);
+}
+
+struct Sample {
+  // Into Document::stack_locations; the stack's depth gives the length.
+  std::size_t first_location;
+  std::array<int, 2> attribute_indices;
+  int attribute_count;
+};
+
+// Every string, location and attribute the samples refer to, resolved to its
+// index before anything is written: the samples come before the dictionary
+// they point into.
+struct Document {
+  const ProfileStack* stacks;
+  std::size_t count;
+  std::vector<std::string> strings = {"", "samples", "count", "process.executable.build_id"};
+  std::vector<uint32_t> locations;
+  std::vector<std::pair<int, std::string>> attributes;
+  std::vector<int> stack_locations;
+  std::vector<Sample> samples;
+  std::string time_unix_nano;
+  std::string duration_nano;
+  std::string profile_id;
+};
+
+class Resolver {
+ public:
+  Resolver(const ProfileStack* stacks, std::size_t count, int64_t time_unix_nano,
+           int64_t duration_nano) {
+    doc_.stacks = stacks;
+    doc_.count = count;
+    doc_.time_unix_nano = std::to_string(time_unix_nano);
+    doc_.duration_nano = std::to_string(duration_nano);
+    doc_.profile_id = random_profile_id();
+    const esp_app_desc_t* app = esp_app_get_description();
+    doc_.attributes.emplace_back(kStrBuildId,
+                                 hex(app->app_elf_sha256, sizeof(app->app_elf_sha256)));
+  }
+
+  Document resolve() && {
+    doc_.samples.reserve(doc_.count);
+    for (std::size_t i = 0; i < doc_.count; ++i) {
+      add_sample(doc_.stacks[i]);
+    }
+    return std::move(doc_);
+  }
+
+ private:
   // Pyroscope turns sample attributes into labels and requires valid
   // Prometheus label names (no dots): thread_name, not thread.name. The
   // span_id attribute is what feeds Pyroscope's span-profiles API (the OTLP
   // link_table is ignored by Pyroscope 1.18.1, so no links are emitted).
-  auto attr_for = [&](const char* key, const std::string& value) -> int {
-    std::string dedupe_key = std::string(key) + "\x1f" + value;
-    auto it = attr_index.find(dedupe_key);
-    if (it != attr_index.end()) return it->second;
-    int idx = next_attr_idx++;
-    t.attributes.push_back(AttributeEntry{intern(key), value});
-    attr_index.emplace(std::move(dedupe_key), idx);
+  void add_sample(const ProfileStack& stack) {
+    Sample sample = {doc_.stack_locations.size(), {}, 0};
+    for (int d = 0; d < stack.depth; ++d) {
+      doc_.stack_locations.push_back(location_for(stack.addresses[d]));
+    }
+    sample.attribute_indices[sample.attribute_count++] =
+        attribute_for("thread_name", thread_name(stack.task_name));
+    if (stack.has_span) {
+      sample.attribute_indices[sample.attribute_count++] =
+          attribute_for("span_id", span_id_hex(stack.span_id));
+    }
+    doc_.samples.push_back(sample);
+  }
+
+  int intern(const std::string& s) {
+    for (size_t i = 0; i < doc_.strings.size(); ++i) {
+      if (doc_.strings[i] == s) return static_cast<int>(i);
+    }
+    doc_.strings.push_back(s);
+    return static_cast<int>(doc_.strings.size() - 1);
+  }
+
+  int location_for(uint32_t addr) {
+    auto it = location_index_.find(addr);
+    if (it != location_index_.end()) return it->second;
+    int idx = static_cast<int>(doc_.locations.size());
+    location_index_.emplace(addr, idx);
+    doc_.locations.push_back(addr);
     return idx;
-  };
-  auto thread_attr_for = [&](const char* task) -> int {
-    return attr_for("thread_name", task ? task : "?");
-  };
-
-  t.samples.reserve(count);
-  for (std::size_t i = 0; i < count; ++i) {
-    const ProfileStack& s = stacks[i];
-
-    SampleEntry entry;
-    entry.loc_indices.reserve(s.depth);
-    for (int d = 0; d < s.depth; ++d) {
-      entry.loc_indices.push_back(location_for(s.addresses[d]));
-    }
-    entry.count = s.count;
-    entry.attr_indices[0] = thread_attr_for(s.task_name);
-    entry.n_attrs = 1;
-    if (s.has_span) {
-      entry.attr_indices[entry.n_attrs++] = attr_for("span_id", span_id_hex(s.span_id));
-    }
-    t.samples.push_back(std::move(entry));
   }
-  return t;
-}
 
-void write_string_value(JsonWriter& w, const std::string& s) {
-  w.BeginObject();
-  w.Key("stringValue");
-  w.WriteString(s);
-  w.EndObject();
-}
-
-void write_resource_attr(JsonWriter& w, const char* key, const char* value) {
-  w.BeginObject();
-  w.Key("key");
-  w.WriteString(key);
-  w.Key("value");
-  write_string_value(w, value);
-  w.EndObject();
-}
-
-// Dotless keys, matching Grafana's convention; an empty value omits the
-// attribute entirely.
-void write_resource_attr_if_set(JsonWriter& w, const char* key, const char* value) {
-  if (value == nullptr || value[0] == '\0') {
-    return;
+  int attribute_for(const char* key, const std::string& value) {
+    std::string dedupe_key = std::string(key) + "\x1f" + value;
+    auto it = attribute_index_.find(dedupe_key);
+    if (it != attribute_index_.end()) return it->second;
+    int idx = static_cast<int>(doc_.attributes.size());
+    doc_.attributes.emplace_back(intern(key), value);
+    attribute_index_.emplace(std::move(dedupe_key), idx);
+    return idx;
   }
-  write_resource_attr(w, key, value);
+
+  Document doc_;
+  std::unordered_map<uint32_t, int> location_index_;
+  std::unordered_map<std::string, int> attribute_index_;
+};
+
+void write_string_value(json_gen_str_t* j, const char* name, const char* s) {
+  json_gen_push_object(j, name);
+  json_gen_obj_set_string(j, "stringValue", s);
+  json_gen_pop_object(j);
 }
 
-void emit_document(JsonWriter& w, const ProfilesTables& t, int64_t time_unix_nano,
-                  int64_t duration_nano) {
-  w.BeginObject();  // root
+void write_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
+  json_gen_start_object(j);
+  json_gen_obj_set_string(j, "key", key);
+  write_string_value(j, "value", value);
+  json_gen_end_object(j);
+}
 
-  w.Key("resourceProfiles");
-  w.BeginArray();
-  w.BeginObject();  // resource_profiles
+// Dotless keys, matching Grafana's convention; empty value omits the attribute.
+void write_optional_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
+  if (value != nullptr && value[0] != '\0') {
+    write_resource_attribute(j, key, value);
+  }
+}
 
-  w.Key("resource");
-  w.BeginObject();
-  w.Key("attributes");
-  w.BeginArray();
-  write_resource_attr(w, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
-  write_resource_attr_if_set(w, "service_repository", CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
-  write_resource_attr_if_set(w, "service_git_ref", esp_opentelemetry::current_git_ref());
-  write_resource_attr_if_set(w, "service_root_path", CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
-  w.EndArray();   // attributes
-  w.EndObject();  // resource
+void write_resource(json_gen_str_t* j) {
+  json_gen_push_object(j, "resource");
+  json_gen_push_array(j, "attributes");
+  write_resource_attribute(j, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
+  write_optional_resource_attribute(j, "service_repository",
+                                    CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
+  write_optional_resource_attribute(j, "service_git_ref", esp_opentelemetry::current_git_ref());
+  write_optional_resource_attribute(j, "service_root_path",
+                                    CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
+  json_gen_pop_array(j);
+  json_gen_pop_object(j);
+}
 
-  w.Key("scopeProfiles");
-  w.BeginArray();
-  w.BeginObject();  // scope_profiles
+void write_sample_type(json_gen_str_t* j, const char* name) {
+  json_gen_push_object(j, name);
+  json_gen_obj_set_int(j, "typeStrindex", kStrSamples);
+  json_gen_obj_set_int(j, "unitStrindex", kStrCount);
+  json_gen_pop_object(j);
+}
 
-  w.Key("scope");
-  w.BeginObject();
-  w.Key("name");
-  w.WriteString("esp-profiling");
-  w.Key("version");
-  w.WriteString("1.0.0");
-  w.EndObject();
-
-  w.Key("profiles");
-  w.BeginArray();
-  w.BeginObject();  // profile
-
-  w.Key("sampleType");
-  w.BeginObject();
-  w.Key("typeStrindex");
-  w.WriteInt32(kStrSamples);
-  w.Key("unitStrindex");
-  w.WriteInt32(kStrCount);
-  w.EndObject();
-
-  w.Key("samples");
-  w.BeginArray();
-  for (std::size_t i = 0; i < t.samples.size(); ++i) {
-    const SampleEntry& s = t.samples[i];
-    w.BeginObject();
-    w.Key("stackIndex");
-    w.WriteInt32(static_cast<int32_t>(i));
-    w.Key("values");
-    w.BeginArray();
-    w.WriteString(std::to_string(s.count));
-    w.EndArray();
-    w.Key("attributeIndices");
-    w.BeginArray();
-    for (int a = 0; a < s.n_attrs; ++a) {
-      w.WriteInt32(s.attr_indices[a]);
+void write_profile(json_gen_str_t* j, const Document& doc) {
+  json_gen_start_object(j);
+  write_sample_type(j, "sampleType");
+  json_gen_push_array(j, "samples");
+  for (std::size_t i = 0; i < doc.count; ++i) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "stackIndex", static_cast<int>(i));
+    json_gen_push_array(j, "values");
+    json_gen_arr_set_string(j, std::to_string(doc.stacks[i].count).c_str());
+    json_gen_pop_array(j);
+    json_gen_push_array(j, "attributeIndices");
+    const Sample& sample = doc.samples[i];
+    for (int a = 0; a < sample.attribute_count; ++a) {
+      json_gen_arr_set_int(j, sample.attribute_indices[a]);
     }
-    w.EndArray();
-    w.EndObject();
+    json_gen_pop_array(j);
+    json_gen_end_object(j);
   }
-  w.EndArray();  // samples
-
-  w.Key("timeUnixNano");
-  w.WriteString(std::to_string(time_unix_nano));
-  w.Key("durationNano");
-  w.WriteString(std::to_string(duration_nano));
-
-  w.Key("periodType");
-  w.BeginObject();
-  w.Key("typeStrindex");
-  w.WriteInt32(kStrSamples);
-  w.Key("unitStrindex");
-  w.WriteInt32(kStrCount);
-  w.EndObject();
-
+  json_gen_pop_array(j);
+  json_gen_obj_set_string(j, "timeUnixNano", doc.time_unix_nano.c_str());
+  json_gen_obj_set_string(j, "durationNano", doc.duration_nano.c_str());
+  write_sample_type(j, "periodType");
   // Pyroscope requires a non-zero period to derive the profile metric name;
   // one count == one sample.
-  w.Key("period");
-  w.WriteString("1");
-  w.Key("profileId");
-  w.WriteString(random_profile_id());
+  json_gen_obj_set_string(j, "period", "1");
+  json_gen_obj_set_string(j, "profileId", doc.profile_id.c_str());
+  json_gen_end_object(j);
+}
 
-  w.EndObject();  // profile
-  w.EndArray();   // profiles
+void write_dictionary(json_gen_str_t* j, const Document& doc) {
+  json_gen_push_object(j, "dictionary");
 
-  w.EndObject();  // scope_profiles
-  w.EndArray();   // scopeProfiles
-
-  w.EndObject();  // resource_profiles
-  w.EndArray();   // resourceProfiles
-
-  w.Key("dictionary");
-  w.BeginObject();
-
-  w.Key("stringTable");
-  w.BeginArray();
-  for (const auto& s : t.strings) {
-    w.WriteString(s);
+  json_gen_push_array(j, "stringTable");
+  for (const auto& str : doc.strings) {
+    json_gen_arr_set_string(j, str.c_str());
   }
-  w.EndArray();
+  json_gen_pop_array(j);
 
-  w.Key("functionTable");
-  w.BeginArray();
-  w.EndArray();
+  json_gen_push_array(j, "functionTable");
+  json_gen_pop_array(j);
 
-  w.Key("mappingTable");
-  w.BeginArray();
-  w.BeginObject();
-  w.Key("memoryStart");
-  w.WriteString("0");
-  w.Key("memoryLimit");
-  w.WriteString("0");
-  w.Key("fileOffset");
-  w.WriteString("0");
-  w.Key("filenameStrindex");
-  w.WriteInt32(kStrEmpty);
-  w.Key("attributeIndices");
-  w.BeginArray();
-  w.WriteInt32(0);  // references attribute_table[0], the build_id
-  w.EndArray();
-  w.EndObject();
-  w.EndArray();  // mappingTable
+  json_gen_push_array(j, "mappingTable");
+  json_gen_start_object(j);
+  json_gen_obj_set_string(j, "memoryStart", "0");
+  json_gen_obj_set_string(j, "memoryLimit", "0");
+  json_gen_obj_set_string(j, "fileOffset", "0");
+  json_gen_obj_set_int(j, "filenameStrindex", kStrEmpty);
+  json_gen_push_array(j, "attributeIndices");
+  json_gen_arr_set_int(j, kAttrBuildId);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
 
-  w.Key("locationTable");
-  w.BeginArray();
-  for (uint32_t addr : t.location_addresses) {
-    w.BeginObject();
-    w.Key("mappingIndex");
-    w.WriteInt32(0);
-    w.Key("address");
-    w.WriteString(std::to_string(addr));
-    w.EndObject();
+  json_gen_push_array(j, "locationTable");
+  for (uint32_t addr : doc.locations) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "mappingIndex", 0);
+    json_gen_obj_set_string(j, "address", std::to_string(addr).c_str());
+    json_gen_end_object(j);
   }
-  w.EndArray();
+  json_gen_pop_array(j);
 
-  w.Key("stackTable");
-  w.BeginArray();
-  for (const auto& s : t.samples) {
-    w.BeginObject();
-    w.Key("locationIndices");
-    w.BeginArray();
-    for (int idx : s.loc_indices) {
-      w.WriteInt32(idx);
+  json_gen_push_array(j, "stackTable");
+  for (std::size_t i = 0; i < doc.count; ++i) {
+    json_gen_start_object(j);
+    json_gen_push_array(j, "locationIndices");
+    const std::size_t first = doc.samples[i].first_location;
+    for (int d = 0; d < doc.stacks[i].depth; ++d) {
+      json_gen_arr_set_int(j, doc.stack_locations[first + d]);
     }
-    w.EndArray();
-    w.EndObject();
+    json_gen_pop_array(j);
+    json_gen_end_object(j);
   }
-  w.EndArray();
+  json_gen_pop_array(j);
 
-  w.Key("attributeTable");
-  w.BeginArray();
-  for (const auto& a : t.attributes) {
-    w.BeginObject();
-    w.Key("keyStrindex");
-    w.WriteInt32(a.key_strindex);
-    w.Key("value");
-    write_string_value(w, a.value);
-    w.EndObject();
+  json_gen_push_array(j, "attributeTable");
+  for (const auto& [key_strindex, value] : doc.attributes) {
+    json_gen_start_object(j);
+    json_gen_obj_set_int(j, "keyStrindex", key_strindex);
+    write_string_value(j, "value", value.c_str());
+    json_gen_end_object(j);
   }
-  w.EndArray();
+  json_gen_pop_array(j);
 
-  w.EndObject();  // dictionary
+  json_gen_pop_object(j);
+}
 
-  w.EndObject();  // root
+void write_document(json_gen_str_t* j, const Document& doc) {
+  json_gen_start_object(j);
+  json_gen_push_array(j, "resourceProfiles");
+  json_gen_start_object(j);
+  write_resource(j);
+  json_gen_push_array(j, "scopeProfiles");
+  json_gen_start_object(j);
+  json_gen_push_object(j, "scope");
+  json_gen_obj_set_string(j, "name", "esp-profiling");
+  json_gen_obj_set_string(j, "version", "1.0.0");
+  json_gen_pop_object(j);
+  json_gen_push_array(j, "profiles");
+  write_profile(j, doc);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
+  json_gen_end_object(j);
+  json_gen_pop_array(j);
+  write_dictionary(j, doc);
+  json_gen_end_object(j);
 }
 
 }  // namespace
@@ -379,21 +405,32 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   if (g_exporter == nullptr || count == 0) {
     return;
   }
+  const Document doc = Resolver(stacks, count, time_unix_nano, duration_nano).resolve();
 
-  const esp_app_desc_t* app = esp_app_get_description();
-  const std::string build_id = hex(app->app_elf_sha256, sizeof(app->app_elf_sha256));
-
-  const ProfilesTables tables = build_tables(stacks, count, build_id);
-
-  auto writer = MakeCjsonJsonWriter();
-  emit_document(*writer, tables, time_unix_nano, duration_nano);
-  if (!writer->ok()) {
-    ESP_LOGW(TAG, "failed to build profiles JSON");
+  json_gen_str_t jstr;
+  json_gen_str_start_measure(&jstr);
+  write_document(&jstr, doc);
+  const int size = json_gen_str_end(&jstr);
+  if (size < 0) {
+    ESP_LOGW(TAG, "failed to measure profiles JSON: %d", size);
     return;
   }
-
-  const std::string body = writer->ToString();
-  (void)g_exporter->Export(body.c_str(), body.size());
+  // The document grows with the profile; the tasks around the export need
+  // internal RAM for FreeRTOS objects, sockets and DMA.
+  char* body = static_cast<char*>(heap_caps_malloc_prefer(
+      static_cast<size_t>(size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
+  if (body == nullptr) {
+    ESP_LOGW(TAG, "no memory for a %d-byte profiles JSON", size);
+    return;
+  }
+  json_gen_str_start(&jstr, body, size, nullptr, nullptr);
+  write_document(&jstr, doc);
+  if (json_gen_str_end(&jstr) < 0) {
+    ESP_LOGW(TAG, "failed to serialize profiles JSON");
+  } else {
+    (void)g_exporter->Export(body, static_cast<std::size_t>(size - 1));
+  }
+  heap_caps_free(body);
 }
 
 }  // namespace esp_opentelemetry
