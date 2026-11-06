@@ -2,9 +2,9 @@
 // object, begin/end array, key, and typed value overloads) rather than a
 // document. This mirrors an interface proposed to opentelemetry-cpp
 // (exporters/otlp/otlp_json_writer.h there, nlohmann-backed) so that a
-// second, independent backend — cJSON, already a dependency of this
-// component — can validate the interface's shape before it goes upstream
-// for review. Abstracting a document would require abstracting node
+// second, independent backend — json_generator, already a dependency of
+// this component — can validate the interface's shape before it goes
+// upstream for review. Abstracting a document would require abstracting node
 // identity, ownership and allocators across libraries whose shapes
 // disagree; a token stream shares no data structure at all.
 //
@@ -68,12 +68,9 @@ class JsonWriter {
   virtual std::string ToString() noexcept = 0;
 };
 
-// The only backend this component provides: cJSON (espressif/cjson), already
-// a dependency of the profiles exporter this interface was extracted from.
-std::unique_ptr<JsonWriter> MakeCjsonJsonWriter();
-
-// Streams into one buffer with json_generator (espressif/json_generator); no
-// document tree is built.
+// The only backend this component provides: json_generator
+// (espressif/json_generator), streaming into one buffer; no document tree is
+// built.
 std::unique_ptr<JsonWriter> MakeJsonGeneratorJsonWriter();
 
 }  // namespace esp_opentelemetry

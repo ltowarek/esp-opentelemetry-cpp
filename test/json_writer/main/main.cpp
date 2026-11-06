@@ -1,4 +1,4 @@
-// The json_generator JsonWriter emits the bytes the cJSON backend did for every token.
+// The json_generator JsonWriter writes each token's exact bytes and rejects malformed token streams.
 
 #include "esp_json_writer.hpp"
 

@@ -58,7 +58,6 @@ endif()
 # API otherwise so callers can call it unconditionally either way.
 if(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
     list(APPEND ESP_OPENTELEMETRY_SRCS
-        src/integration/esp_json_writer_cjson.cpp
         src/integration/esp_json_writer_json_generator.cpp
         src/integration/esp_profiles_document.cpp
         src/integration/esp_profiling.cpp
@@ -102,7 +101,6 @@ set(ESP_OPENTELEMETRY_REQUIRES
 # nothing unless its transport is selected).
 list(APPEND ESP_OPENTELEMETRY_REQUIRES
     app_trace
-    cjson
     esp_app_format
     esp_hw_support
     esp_driver_gptimer
