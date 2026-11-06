@@ -59,6 +59,7 @@ endif()
 if(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
     list(APPEND ESP_OPENTELEMETRY_SRCS
         src/integration/esp_json_writer_cjson.cpp
+        src/integration/esp_json_writer_json_generator.cpp
         src/integration/esp_profiles_document.cpp
         src/integration/esp_profiling.cpp
         src/integration/esp_task_span_slot.cpp)

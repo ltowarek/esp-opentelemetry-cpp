@@ -72,4 +72,8 @@ class JsonWriter {
 // a dependency of the profiles exporter this interface was extracted from.
 std::unique_ptr<JsonWriter> MakeCjsonJsonWriter();
 
+// Streams into one buffer with json_generator (espressif/json_generator); no
+// document tree is built.
+std::unique_ptr<JsonWriter> MakeJsonGeneratorJsonWriter();
+
 }  // namespace esp_opentelemetry
