@@ -62,15 +62,12 @@ class JsonWriter {
   // once false, stays false for the lifetime of this writer.
   virtual bool ok() const noexcept = 0;
 
-  // Returns the document accumulated so far, serialized as a string. Valid
-  // to call regardless of ok(); a failed writer returns whatever was
-  // accumulated before the first failure.
+  // Ends the document and returns it; any later write fails. Valid to call
+  // regardless of ok(): a failed writer returns what preceded the failure.
   virtual std::string ToString() noexcept = 0;
 };
 
-// The only backend this component provides: json_generator
-// (espressif/json_generator), streaming into one buffer; no document tree is
-// built.
+// The only backend this component provides: json_generator (espressif/json_generator).
 std::unique_ptr<JsonWriter> MakeJsonGeneratorJsonWriter();
 
 }  // namespace esp_opentelemetry

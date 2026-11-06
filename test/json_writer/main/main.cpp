@@ -299,11 +299,13 @@ void test_second_top_level_value_fails() {
   }));
 }
 
-void test_failure_is_sticky() {
-  TEST_ASSERT_FALSE(writes_ok([](JsonWriter& w) {
-    w.EndArray();
-    w.WriteInt32(1);
-  }));
+void test_write_after_to_string_fails() {
+  const std::unique_ptr<JsonWriter> w = esp_opentelemetry::MakeJsonGeneratorJsonWriter();
+  w->BeginArray();
+  w->EndArray();
+  (void)w->ToString();
+  w->BeginArray();
+  TEST_ASSERT_FALSE(w->ok());
 }
 
 void test_failed_writer_returns_what_preceded_the_failure() {
@@ -364,7 +366,7 @@ extern "C" void app_main() {
   RUN_TEST(test_end_without_begin_fails);
   RUN_TEST(test_object_closed_after_a_dangling_key_fails);
   RUN_TEST(test_second_top_level_value_fails);
-  RUN_TEST(test_failure_is_sticky);
+  RUN_TEST(test_write_after_to_string_fails);
   RUN_TEST(test_failed_writer_returns_what_preceded_the_failure);
   UNITY_END();
 }

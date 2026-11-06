@@ -1,9 +1,4 @@
-// json_generator-backed JsonWriter. Tokens stream straight into a fixed chunk
-// that json_generator flushes into the output string as it fills.
-//
-// The token stream is validated before json_generator sees a call, since
-// json_generator itself trusts its caller to balance containers and pair names
-// with values.
+// Validated before json_generator sees it, which trusts its caller to balance containers.
 
 #include "esp_json_writer.hpp"
 
@@ -16,6 +11,7 @@ extern "C" {
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace esp_opentelemetry {
@@ -104,23 +100,19 @@ std::size_t matched_length(const unsigned char* bytes, std::size_t available, Ut
 std::string_view well_formed_utf8(std::string_view text, std::string& repaired) {
   const auto* bytes = reinterpret_cast<const unsigned char*>(text.data());
   const std::size_t size = text.size();
-  std::size_t i = 0;
-  while (i < size) {
-    const Utf8Lead lead = utf8_lead(bytes[i]);
-    if (lead.length == 0 || matched_length(bytes + i, size - i, lead) != lead.length) {
-      break;
-    }
-    i += lead.length;
-  }
-  if (i == size) {
-    return text;
-  }
-  repaired.assign(text.substr(0, i));
-  while (i < size) {
+  bool repairing = false;
+  for (std::size_t i = 0; i < size;) {
     const Utf8Lead lead = utf8_lead(bytes[i]);
     const std::size_t matched = matched_length(bytes + i, size - i, lead);
-    if (lead.length > 0 && matched == lead.length) {
-      repaired.append(text.substr(i, matched));
+    const bool whole = lead.length > 0 && matched == lead.length;
+    if (!whole && !repairing) {
+      repaired.assign(text.substr(0, i));
+      repairing = true;
+    }
+    if (whole) {
+      if (repairing) {
+        repaired.append(text.substr(i, matched));
+      }
     } else if (lead.length > 0 && i + matched == size) {
       break;
     } else {
@@ -128,7 +120,7 @@ std::string_view well_formed_utf8(std::string_view text, std::string& repaired) 
     }
     i += matched > 0 ? matched : 1;
   }
-  return repaired;
+  return repairing ? std::string_view(repaired) : text;
 }
 
 class JsonGeneratorJsonWriter final : public JsonWriter {
@@ -144,6 +136,10 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
 
   void Key(std::string_view key) noexcept override {
     if (!ok_) {
+      return;
+    }
+    if (ended_) {
+      Fail("Key() called after ToString()");
       return;
     }
     if (stack_.empty() || stack_.back() != Container::kObject) {
@@ -217,7 +213,7 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
       ended_ = true;
       Check(json_gen_str_end(&gen_));
     }
-    return out_;
+    return std::move(out_);
   }
 
  private:
@@ -232,6 +228,10 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
 
   Slot Claim() noexcept {
     if (!ok_) {
+      return Slot::kRejected;
+    }
+    if (ended_) {
+      Fail("a value was written after ToString()");
       return Slot::kRejected;
     }
     if (stack_.empty()) {
@@ -282,6 +282,10 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
 
   void Close(Container kind) noexcept {
     if (!ok_) {
+      return;
+    }
+    if (ended_) {
+      Fail("a container was closed after ToString()");
       return;
     }
     if (stack_.empty() || stack_.back() != kind) {
