@@ -123,8 +123,9 @@ materialization on the same condition.
 
 The SDK reaches JSON only through its `JsonWriter`/`JsonReader` seams, and its
 bundled nlohmann-json backend is excluded (that library's error path is
-exceptions, which ESP-IDF builds disable). This component supplies cJSON-backed
-factories instead, and hands them to every exporter it constructs.
+exceptions, which ESP-IDF builds disable). This component supplies its own
+factories instead — `json_generator` writes request bodies and cJSON parses
+export responses — and hands them to every exporter it constructs.
 
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
 an OTLP/HTTP exporter from that signal's `..._OTLP_BASE_URL`, which is what a

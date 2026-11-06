@@ -4,7 +4,7 @@
 #          -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.tracing" \
 #          -D SDKCONFIG=build_tracing/sdkconfig build
 #
-# The one configuration that compiles the cJSON JsonWriter for the profiles
+# The one configuration that compiles the JsonWriter for the profiles
 # exporter while the SDK's OTLP exporter tree - where its JSON seam targets
 # live - is not configured at all. Nothing else covers it, and getting the
 # distinction wrong fails at link, not at configure.

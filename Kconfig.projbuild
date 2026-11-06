@@ -43,8 +43,8 @@ menu "OpenTelemetry"
         bool "OTLP/JSON (no protobuf)"
         help
             The SDK's OtlpJsonHttp* exporters, which map SDK recordables
-            straight to JSON tokens emitted through this component's cJSON
-            writer. Neither protobuf nor Abseil is compiled or linked.
+            straight to JSON tokens emitted through this component's
+            json_generator writer. Neither protobuf nor Abseil is compiled or linked.
 
     config ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF
         bool "OTLP/JSON via protobuf"

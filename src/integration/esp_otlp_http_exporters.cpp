@@ -87,13 +87,13 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporte
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(
-          options, CjsonRuntimeOptions<otlp_api::OtlpHttpExporterRuntimeOptions>(),
+          options, JsonGeneratorRuntimeOptions<otlp_api::OtlpHttpExporterRuntimeOptions>(),
           MakeEspHttpClient()));
 #else
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpJsonHttpExporter(
           options, otlp_api::OtlpHttpExporterRuntimeOptions(), MakeEspHttpClient(),
-          CjsonJsonWriterFactory(), CjsonJsonReaderFactory()));
+          JsonGeneratorJsonWriterFactory(), CjsonJsonReaderFactory()));
 #endif
 #else
   return nullptr;
@@ -108,13 +108,13 @@ MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpHttpLogRecordExporter(
-          options, CjsonRuntimeOptions<otlp_api::OtlpHttpLogRecordExporterRuntimeOptions>(),
+          options, JsonGeneratorRuntimeOptions<otlp_api::OtlpHttpLogRecordExporterRuntimeOptions>(),
           MakeEspHttpClient()));
 #else
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpJsonHttpLogRecordExporter(
           options, otlp_api::OtlpHttpLogRecordExporterRuntimeOptions(),
-          MakeEspHttpClient(), CjsonJsonWriterFactory(), CjsonJsonReaderFactory()));
+          MakeEspHttpClient(), JsonGeneratorJsonWriterFactory(), CjsonJsonReaderFactory()));
 #endif
 #else
   return nullptr;
@@ -128,12 +128,12 @@ MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& base_url) {
   ApplyCommon(options, base_url + "/v1/metrics");
 #if defined(CONFIG_ESP_OPENTELEMETRY_OTLP_HTTP_ENCODING_PROTOBUF)
   return otlp_api::OtlpHttpMetricExporterFactory::Create(
-      options, CjsonRuntimeOptions<otlp_api::OtlpHttpMetricExporterRuntimeOptions>(),
+      options, JsonGeneratorRuntimeOptions<otlp_api::OtlpHttpMetricExporterRuntimeOptions>(),
       MakeEspHttpClient());
 #else
   return otlp_api::OtlpJsonHttpMetricExporterFactory::Create(
       options, otlp_api::OtlpHttpMetricExporterRuntimeOptions(), MakeEspHttpClient(),
-      CjsonJsonWriterFactory(), CjsonJsonReaderFactory());
+      JsonGeneratorJsonWriterFactory(), CjsonJsonReaderFactory());
 #endif
 #else
   return nullptr;

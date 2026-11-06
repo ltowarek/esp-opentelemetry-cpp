@@ -6,8 +6,8 @@
 // nlohmann-json. That backend is excluded here
 // (OTELCPP_WITH_JSON_WRITER_NLOHMANN=OFF): nlohmann is a heavyweight
 // header-only library whose error path is exceptions, which ESP-IDF builds
-// disable. cJSON, which this component already depends on, provides both
-// instead.
+// disable. json_generator writes request bodies instead and cJSON parses
+// export responses.
 //
 // With the bundled backend excluded, the SDK has no default to fall back on:
 // its GetDefaultJsonWriterFactory() terminates. Every exporter this component
@@ -28,15 +28,15 @@ namespace esp_opentelemetry {
 // Both are process-wide singletons: a factory holds no per-exporter state, and
 // the SDK takes them by shared_ptr expecting to share one.
 std::shared_ptr<opentelemetry::exporter::otlp::JsonWriterFactory>
-CjsonJsonWriterFactory();
+JsonGeneratorJsonWriterFactory();
 
 std::shared_ptr<opentelemetry::exporter::otlp::JsonReaderFactory>
 CjsonJsonReaderFactory();
 
 template <typename RuntimeOptions>
-RuntimeOptions CjsonRuntimeOptions() {
+RuntimeOptions JsonGeneratorRuntimeOptions() {
   RuntimeOptions runtime_options;
-  runtime_options.json_writer_factory = CjsonJsonWriterFactory();
+  runtime_options.json_writer_factory = JsonGeneratorJsonWriterFactory();
   return runtime_options;
 }
 

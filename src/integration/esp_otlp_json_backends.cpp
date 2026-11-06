@@ -28,9 +28,9 @@ namespace {
 // token-for-token identical and deliberately stay separate types: the profiles
 // exporter emits through JsonWriter in builds where no signal is enabled and
 // the SDK headers are not on the include path at all.
-class CjsonOtlpJsonWriter final : public otlp_api::JsonWriter {
+class JsonGeneratorOtlpJsonWriter final : public otlp_api::JsonWriter {
  public:
-  CjsonOtlpJsonWriter() : impl_(MakeJsonGeneratorJsonWriter()) {}
+  JsonGeneratorOtlpJsonWriter() : impl_(MakeJsonGeneratorJsonWriter()) {}
 
   void BeginObject() noexcept override { impl_->BeginObject(); }
   void EndObject() noexcept override { impl_->EndObject(); }
@@ -66,10 +66,10 @@ class CjsonOtlpJsonWriter final : public otlp_api::JsonWriter {
   const std::unique_ptr<esp_opentelemetry::JsonWriter> impl_;
 };
 
-class CjsonJsonWriterFactoryImpl final : public otlp_api::JsonWriterFactory {
+class JsonGeneratorJsonWriterFactoryImpl final : public otlp_api::JsonWriterFactory {
  public:
   std::unique_ptr<otlp_api::JsonWriter> Create() override {
-    return std::unique_ptr<otlp_api::JsonWriter>(new CjsonOtlpJsonWriter());
+    return std::unique_ptr<otlp_api::JsonWriter>(new JsonGeneratorOtlpJsonWriter());
   }
 };
 
@@ -214,9 +214,9 @@ class CjsonJsonReaderFactoryImpl final : public otlp_api::JsonReaderFactory {
 
 }  // namespace
 
-std::shared_ptr<otlp_api::JsonWriterFactory> CjsonJsonWriterFactory() {
+std::shared_ptr<otlp_api::JsonWriterFactory> JsonGeneratorJsonWriterFactory() {
   static const std::shared_ptr<otlp_api::JsonWriterFactory> instance =
-      std::make_shared<CjsonJsonWriterFactoryImpl>();
+      std::make_shared<JsonGeneratorJsonWriterFactoryImpl>();
   return instance;
 }
 

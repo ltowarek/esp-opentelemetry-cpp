@@ -271,7 +271,7 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     set(OTELCPP_WITH_HTTP_CLIENT_CURL OFF CACHE BOOL "" FORCE)
     # The SDK's own JsonWriter/JsonReader backend is nlohmann-json, a
     # header-only library whose error path is exceptions - unavailable here.
-    # esp_otlp_json_backends.cpp supplies cJSON-backed factories instead, which
+    # esp_otlp_json_backends.cpp supplies its own factories instead, which
     # every exporter this component constructs is handed explicitly.
     set(OTELCPP_WITH_JSON_WRITER_NLOHMANN OFF CACHE BOOL "" FORCE)
 
