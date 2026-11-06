@@ -18,23 +18,21 @@
 
 extern "C" {
 #include "esp_app_desc.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_random.h"
-#include "json_generator.h"
 }
 
 #include "esp_git_ref.hpp"
+#include "esp_json_writer.hpp"
 #include "esp_profiles_exporter.hpp"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/trace/span_id.h"
 
-#include <algorithm>
 #include <array>
-#include <cstring>
 #include <memory>
 #include <utility>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -86,72 +84,8 @@ std::string span_id_hex(const uint8_t (&span_id)[8]) {
   return std::string(buf, sizeof(buf));
 }
 
-constexpr const char* kReplacementCharacter = "\xEF\xBF\xBD";  // U+FFFD
-
-// A well-formed sequence's length and the range its second byte must fall in;
-// the bytes after it are always 0x80..0xBF (Unicode Table 3-7). A length of 0
-// marks a byte that cannot start a sequence.
-struct Utf8Lead {
-  int length;
-  unsigned char second_min;
-  unsigned char second_max;
-};
-
-Utf8Lead utf8_lead(unsigned char byte) {
-  if (byte < 0x80) return {1, 0, 0};
-  if (byte >= 0xC2 && byte <= 0xDF) return {2, 0x80, 0xBF};
-  if (byte == 0xE0) return {3, 0xA0, 0xBF};
-  if (byte == 0xED) return {3, 0x80, 0x9F};
-  if (byte >= 0xE1 && byte <= 0xEF) return {3, 0x80, 0xBF};
-  if (byte == 0xF0) return {4, 0x90, 0xBF};
-  if (byte >= 0xF1 && byte <= 0xF3) return {4, 0x80, 0xBF};
-  if (byte == 0xF4) return {4, 0x80, 0x8F};
-  return {0, 0, 0};
-}
-
-// How many bytes of the sequence that `lead` starts are well-formed, out of
-// the `available` bytes from its lead byte on.
-int matched_length(const unsigned char* bytes, int available, Utf8Lead lead) {
-  if (lead.length == 0) {
-    return 0;
-  }
-  for (int matched = 1; matched < lead.length && matched < available; ++matched) {
-    const unsigned char min = matched == 1 ? lead.second_min : 0x80;
-    const unsigned char max = matched == 1 ? lead.second_max : 0xBF;
-    if (bytes[matched] < min || bytes[matched] > max) {
-      return matched;
-    }
-  }
-  return std::min(lead.length, available);
-}
-
-// JSON strings must be UTF-8, and json_generator fails the whole document on
-// one that is not. Each ill-formed sequence becomes one U+FFFD, as Unicode
-// recommends. A character left incomplete at the end is dropped instead:
-// FreeRTOS truncates task names by bytes, which can cut a character in half.
-std::string to_utf8(const char* text) {
-  const auto* bytes = reinterpret_cast<const unsigned char*>(text);
-  const int size = static_cast<int>(std::strlen(text));
-  std::string utf8;
-  utf8.reserve(static_cast<std::size_t>(size));
-  for (int i = 0; i < size;) {
-    const Utf8Lead lead = utf8_lead(bytes[i]);
-    const int matched = matched_length(bytes + i, size - i, lead);
-    if (lead.length > 0 && matched == lead.length) {
-      utf8.append(text + i, static_cast<std::size_t>(matched));
-    } else if (lead.length > 0 && i + matched == size) {
-      break;
-    } else {
-      utf8 += kReplacementCharacter;
-    }
-    i += matched > 0 ? matched : 1;
-  }
-  return utf8;
-}
-
-std::string thread_name(const char* task_name) {
-  return task_name == nullptr ? "?" : to_utf8(task_name);
-}
+// JsonWriter repairs a task name that is not UTF-8.
+std::string thread_name(const char* task_name) { return task_name == nullptr ? "?" : task_name; }
 
 struct Sample {
   // Into Document::stack_locations; the stack's depth gives the length.
@@ -249,153 +183,191 @@ class Resolver {
   std::unordered_map<std::string, int> attribute_index_;
 };
 
-void write_string_value(json_gen_str_t* j, const char* name, const char* s) {
-  json_gen_push_object(j, name);
-  json_gen_obj_set_string(j, "stringValue", s);
-  json_gen_pop_object(j);
+void write_string_value(JsonWriter& j, const char* name, std::string_view s) {
+  j.Key(name);
+  j.BeginObject();
+  j.Key("stringValue");
+  j.WriteString(s);
+  j.EndObject();
 }
 
-void write_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
-  json_gen_start_object(j);
-  json_gen_obj_set_string(j, "key", key);
+void write_resource_attribute(JsonWriter& j, const char* key, const char* value) {
+  j.BeginObject();
+  j.Key("key");
+  j.WriteString(key);
   write_string_value(j, "value", value);
-  json_gen_end_object(j);
+  j.EndObject();
 }
 
 // Dotless keys, matching Grafana's convention; empty value omits the attribute.
-void write_optional_resource_attribute(json_gen_str_t* j, const char* key, const char* value) {
+void write_optional_resource_attribute(JsonWriter& j, const char* key, const char* value) {
   if (value != nullptr && value[0] != '\0') {
     write_resource_attribute(j, key, value);
   }
 }
 
-void write_resource(json_gen_str_t* j) {
-  json_gen_push_object(j, "resource");
-  json_gen_push_array(j, "attributes");
+void write_resource(JsonWriter& j) {
+  j.Key("resource");
+  j.BeginObject();
+  j.Key("attributes");
+  j.BeginArray();
   write_resource_attribute(j, "service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME);
   write_optional_resource_attribute(j, "service_repository",
                                     CONFIG_ESP_OPENTELEMETRY_SERVICE_REPOSITORY);
   write_optional_resource_attribute(j, "service_git_ref", esp_opentelemetry::current_git_ref());
   write_optional_resource_attribute(j, "service_root_path",
                                     CONFIG_ESP_OPENTELEMETRY_SERVICE_ROOT_PATH);
-  json_gen_pop_array(j);
-  json_gen_pop_object(j);
+  j.EndArray();
+  j.EndObject();
 }
 
-void write_sample_type(json_gen_str_t* j, const char* name) {
-  json_gen_push_object(j, name);
-  json_gen_obj_set_int(j, "typeStrindex", kStrSamples);
-  json_gen_obj_set_int(j, "unitStrindex", kStrCount);
-  json_gen_pop_object(j);
+void write_sample_type(JsonWriter& j, const char* name) {
+  j.Key(name);
+  j.BeginObject();
+  j.Key("typeStrindex");
+  j.WriteInt32(kStrSamples);
+  j.Key("unitStrindex");
+  j.WriteInt32(kStrCount);
+  j.EndObject();
 }
 
-void write_profile(json_gen_str_t* j, const Document& doc) {
-  json_gen_start_object(j);
+void write_profile(JsonWriter& j, const Document& doc) {
+  j.BeginObject();
   write_sample_type(j, "sampleType");
-  json_gen_push_array(j, "samples");
+  j.Key("samples");
+  j.BeginArray();
   for (std::size_t i = 0; i < doc.count; ++i) {
-    json_gen_start_object(j);
-    json_gen_obj_set_int(j, "stackIndex", static_cast<int>(i));
-    json_gen_push_array(j, "values");
-    json_gen_arr_set_string(j, std::to_string(doc.stacks[i].count).c_str());
-    json_gen_pop_array(j);
-    json_gen_push_array(j, "attributeIndices");
+    j.BeginObject();
+    j.Key("stackIndex");
+    j.WriteInt32(static_cast<int>(i));
+    j.Key("values");
+    j.BeginArray();
+    j.WriteString(std::to_string(doc.stacks[i].count));
+    j.EndArray();
+    j.Key("attributeIndices");
+    j.BeginArray();
     const Sample& sample = doc.samples[i];
     for (int a = 0; a < sample.attribute_count; ++a) {
-      json_gen_arr_set_int(j, sample.attribute_indices[a]);
+      j.WriteInt32(sample.attribute_indices[a]);
     }
-    json_gen_pop_array(j);
-    json_gen_end_object(j);
+    j.EndArray();
+    j.EndObject();
   }
-  json_gen_pop_array(j);
-  json_gen_obj_set_string(j, "timeUnixNano", doc.time_unix_nano.c_str());
-  json_gen_obj_set_string(j, "durationNano", doc.duration_nano.c_str());
+  j.EndArray();
+  j.Key("timeUnixNano");
+  j.WriteString(doc.time_unix_nano);
+  j.Key("durationNano");
+  j.WriteString(doc.duration_nano);
   write_sample_type(j, "periodType");
   // Pyroscope requires a non-zero period to derive the profile metric name;
   // one count == one sample.
-  json_gen_obj_set_string(j, "period", "1");
-  json_gen_obj_set_string(j, "profileId", doc.profile_id.c_str());
-  json_gen_end_object(j);
+  j.Key("period");
+  j.WriteString("1");
+  j.Key("profileId");
+  j.WriteString(doc.profile_id);
+  j.EndObject();
 }
 
-void write_dictionary(json_gen_str_t* j, const Document& doc) {
-  json_gen_push_object(j, "dictionary");
+void write_dictionary(JsonWriter& j, const Document& doc) {
+  j.Key("dictionary");
+  j.BeginObject();
 
-  json_gen_push_array(j, "stringTable");
+  j.Key("stringTable");
+  j.BeginArray();
   for (const auto& str : doc.strings) {
-    json_gen_arr_set_string(j, str.c_str());
+    j.WriteString(str);
   }
-  json_gen_pop_array(j);
+  j.EndArray();
 
-  json_gen_push_array(j, "functionTable");
-  json_gen_pop_array(j);
+  j.Key("functionTable");
+  j.BeginArray();
+  j.EndArray();
 
-  json_gen_push_array(j, "mappingTable");
-  json_gen_start_object(j);
-  json_gen_obj_set_string(j, "memoryStart", "0");
-  json_gen_obj_set_string(j, "memoryLimit", "0");
-  json_gen_obj_set_string(j, "fileOffset", "0");
-  json_gen_obj_set_int(j, "filenameStrindex", kStrEmpty);
-  json_gen_push_array(j, "attributeIndices");
-  json_gen_arr_set_int(j, kAttrBuildId);
-  json_gen_pop_array(j);
-  json_gen_end_object(j);
-  json_gen_pop_array(j);
+  j.Key("mappingTable");
+  j.BeginArray();
+  j.BeginObject();
+  j.Key("memoryStart");
+  j.WriteString("0");
+  j.Key("memoryLimit");
+  j.WriteString("0");
+  j.Key("fileOffset");
+  j.WriteString("0");
+  j.Key("filenameStrindex");
+  j.WriteInt32(kStrEmpty);
+  j.Key("attributeIndices");
+  j.BeginArray();
+  j.WriteInt32(kAttrBuildId);
+  j.EndArray();
+  j.EndObject();
+  j.EndArray();
 
-  json_gen_push_array(j, "locationTable");
+  j.Key("locationTable");
+  j.BeginArray();
   for (uint32_t addr : doc.locations) {
-    json_gen_start_object(j);
-    json_gen_obj_set_int(j, "mappingIndex", 0);
-    json_gen_obj_set_string(j, "address", std::to_string(addr).c_str());
-    json_gen_end_object(j);
+    j.BeginObject();
+    j.Key("mappingIndex");
+    j.WriteInt32(0);
+    j.Key("address");
+    j.WriteString(std::to_string(addr));
+    j.EndObject();
   }
-  json_gen_pop_array(j);
+  j.EndArray();
 
-  json_gen_push_array(j, "stackTable");
+  j.Key("stackTable");
+  j.BeginArray();
   for (std::size_t i = 0; i < doc.count; ++i) {
-    json_gen_start_object(j);
-    json_gen_push_array(j, "locationIndices");
+    j.BeginObject();
+    j.Key("locationIndices");
+    j.BeginArray();
     const std::size_t first = doc.samples[i].first_location;
     for (int d = 0; d < doc.stacks[i].depth; ++d) {
-      json_gen_arr_set_int(j, doc.stack_locations[first + d]);
+      j.WriteInt32(doc.stack_locations[first + d]);
     }
-    json_gen_pop_array(j);
-    json_gen_end_object(j);
+    j.EndArray();
+    j.EndObject();
   }
-  json_gen_pop_array(j);
+  j.EndArray();
 
-  json_gen_push_array(j, "attributeTable");
+  j.Key("attributeTable");
+  j.BeginArray();
   for (const auto& [key_strindex, value] : doc.attributes) {
-    json_gen_start_object(j);
-    json_gen_obj_set_int(j, "keyStrindex", key_strindex);
-    write_string_value(j, "value", value.c_str());
-    json_gen_end_object(j);
+    j.BeginObject();
+    j.Key("keyStrindex");
+    j.WriteInt32(key_strindex);
+    write_string_value(j, "value", value);
+    j.EndObject();
   }
-  json_gen_pop_array(j);
+  j.EndArray();
 
-  json_gen_pop_object(j);
+  j.EndObject();
 }
 
-void write_document(json_gen_str_t* j, const Document& doc) {
-  json_gen_start_object(j);
-  json_gen_push_array(j, "resourceProfiles");
-  json_gen_start_object(j);
+void write_document(JsonWriter& j, const Document& doc) {
+  j.BeginObject();
+  j.Key("resourceProfiles");
+  j.BeginArray();
+  j.BeginObject();
   write_resource(j);
-  json_gen_push_array(j, "scopeProfiles");
-  json_gen_start_object(j);
-  json_gen_push_object(j, "scope");
-  json_gen_obj_set_string(j, "name", "esp-profiling");
-  json_gen_obj_set_string(j, "version", "1.0.0");
-  json_gen_pop_object(j);
-  json_gen_push_array(j, "profiles");
+  j.Key("scopeProfiles");
+  j.BeginArray();
+  j.BeginObject();
+  j.Key("scope");
+  j.BeginObject();
+  j.Key("name");
+  j.WriteString("esp-profiling");
+  j.Key("version");
+  j.WriteString("1.0.0");
+  j.EndObject();
+  j.Key("profiles");
+  j.BeginArray();
   write_profile(j, doc);
-  json_gen_pop_array(j);
-  json_gen_end_object(j);
-  json_gen_pop_array(j);
-  json_gen_end_object(j);
-  json_gen_pop_array(j);
+  j.EndArray();
+  j.EndObject();
+  j.EndArray();
+  j.EndObject();
+  j.EndArray();
   write_dictionary(j, doc);
-  json_gen_end_object(j);
+  j.EndObject();
 }
 
 }  // namespace
@@ -407,30 +379,14 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   }
   const Document doc = Resolver(stacks, count, time_unix_nano, duration_nano).resolve();
 
-  json_gen_str_t jstr;
-  json_gen_str_start_measure(&jstr);
-  write_document(&jstr, doc);
-  const int size = json_gen_str_end(&jstr);
-  if (size < 0) {
-    ESP_LOGW(TAG, "failed to measure profiles JSON: %d", size);
-    return;
-  }
-  // The document grows with the profile; the tasks around the export need
-  // internal RAM for FreeRTOS objects, sockets and DMA.
-  char* body = static_cast<char*>(heap_caps_malloc_prefer(
-      static_cast<size_t>(size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_DEFAULT));
-  if (body == nullptr) {
-    ESP_LOGW(TAG, "no memory for a %d-byte profiles JSON", size);
-    return;
-  }
-  json_gen_str_start(&jstr, body, size, nullptr, nullptr);
-  write_document(&jstr, doc);
-  if (json_gen_str_end(&jstr) < 0) {
+  const std::unique_ptr<JsonWriter> writer = MakeJsonGeneratorJsonWriter();
+  write_document(*writer, doc);
+  const std::string body = writer->ToString();
+  if (!writer->ok()) {
     ESP_LOGW(TAG, "failed to serialize profiles JSON");
-  } else {
-    (void)g_exporter->Export(body, static_cast<std::size_t>(size - 1));
+    return;
   }
-  heap_caps_free(body);
+  (void)g_exporter->Export(body.data(), body.size());
 }
 
 }  // namespace esp_opentelemetry
