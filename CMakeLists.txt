@@ -139,6 +139,12 @@ set(ESP_OPENTELEMETRY_CPP_API_INCLUDE
 set(ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE
     "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/sdk/include")
 
+# The SDK's JsonWriter/JsonReader seam headers depend only on api/, and the
+# profiles exporter writes through the JsonWriter in builds that configure no
+# OTLP exporter tree.
+set(ESP_OPENTELEMETRY_CPP_OTLP_INCLUDE
+    "${CMAKE_CURRENT_LIST_DIR}/third_party/opentelemetry-cpp/exporters/otlp/include")
+
 set(ESP_OPENTELEMETRY_REQUIRES
     esp_http_client
     pthread
@@ -173,6 +179,7 @@ endif()
 idf_component_register(
     SRCS ${ESP_OPENTELEMETRY_SRCS}
     INCLUDE_DIRS "include" "${ESP_OPENTELEMETRY_CPP_API_INCLUDE}" "${ESP_OPENTELEMETRY_CPP_SDK_RESOURCE_INCLUDE}"
+                 "${ESP_OPENTELEMETRY_CPP_OTLP_INCLUDE}"
     PRIV_INCLUDE_DIRS "src/integration"
     REQUIRES ${ESP_OPENTELEMETRY_REQUIRES}
     LDFRAGMENTS ${ESP_OPENTELEMETRY_LDFRAGMENTS}
@@ -383,8 +390,8 @@ if(CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED)
     endif()
 
     target_link_libraries(${COMPONENT_LIB} PUBLIC opentelemetry_common)
-    # esp_otlp_json_backends.cpp implements the SDK's two JSON seams, whose
-    # headers these INTERFACE targets carry. They are defined only when the OTLP
+    # The SDK's two JSON seams, implemented by this component's writer and
+    # reader, are carried by these INTERFACE targets. They are defined only when the OTLP
     # exporter tree is configured, so this follows the condition that compiles
     # that source and not ESP_OPENTELEMETRY_NEEDS_JSON_WRITER, which profiling
     # alone also sets.

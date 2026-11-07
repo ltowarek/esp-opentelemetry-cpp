@@ -1,7 +1,5 @@
 #include "esp_otlp_json_backends.hpp"
 
-#include "esp_json_writer.hpp"
-
 #include <cJSON.h>
 
 #include <cerrno>
@@ -14,7 +12,6 @@
 #include <vector>
 
 #include "opentelemetry/exporters/otlp/otlp_json_reader.h"
-#include "opentelemetry/exporters/otlp/otlp_json_writer.h"
 #include "opentelemetry/nostd/string_view.h"
 
 namespace otlp_api = opentelemetry::exporter::otlp;
@@ -22,56 +19,6 @@ namespace otlp_api = opentelemetry::exporter::otlp;
 namespace esp_opentelemetry {
 
 namespace {
-
-// Forwards the SDK's token vocabulary onto this component's own JsonWriter,
-// which json_generator already backs for the profiles exporter. The two interfaces are
-// token-for-token identical and deliberately stay separate types: the profiles
-// exporter emits through JsonWriter in builds where no signal is enabled and
-// the SDK headers are not on the include path at all.
-class JsonGeneratorOtlpJsonWriter final : public otlp_api::JsonWriter {
- public:
-  JsonGeneratorOtlpJsonWriter() : impl_(MakeJsonGeneratorJsonWriter()) {}
-
-  void BeginObject() noexcept override { impl_->BeginObject(); }
-  void EndObject() noexcept override { impl_->EndObject(); }
-  void BeginArray() noexcept override { impl_->BeginArray(); }
-  void EndArray() noexcept override { impl_->EndArray(); }
-
-  void Key(opentelemetry::nostd::string_view key) noexcept override {
-    impl_->Key(std::string_view(key.data(), key.size()));
-  }
-
-  void WriteNull() noexcept override { impl_->WriteNull(); }
-
-  void WriteString(opentelemetry::nostd::string_view value) noexcept override {
-    impl_->WriteString(std::string_view(value.data(), value.size()));
-  }
-
-  void WriteInt32(std::int32_t value) noexcept override { impl_->WriteInt32(value); }
-  void WriteInt64(std::int64_t value) noexcept override { impl_->WriteInt64(value); }
-  void WriteUInt32(std::uint32_t value) noexcept override { impl_->WriteUInt32(value); }
-  void WriteUInt64(std::uint64_t value) noexcept override { impl_->WriteUInt64(value); }
-  void WriteDouble(double value) noexcept override { impl_->WriteDouble(value); }
-  void WriteBool(bool value) noexcept override { impl_->WriteBool(value); }
-
-  void WriteBytes(const std::uint8_t* data, std::size_t size) noexcept override {
-    impl_->WriteBytes(data, size);
-  }
-
-  bool ok() const noexcept override { return impl_->ok(); }
-  std::string ToString() noexcept override { return impl_->ToString(); }
-
- private:
-  // Qualified: JsonWriter unqualified names the SDK's interface here.
-  const std::unique_ptr<esp_opentelemetry::JsonWriter> impl_;
-};
-
-class JsonGeneratorJsonWriterFactoryImpl final : public otlp_api::JsonWriterFactory {
- public:
-  std::unique_ptr<otlp_api::JsonWriter> Create() override {
-    return std::unique_ptr<otlp_api::JsonWriter>(new JsonGeneratorOtlpJsonWriter());
-  }
-};
 
 // Parses a decimal integer the way OTLP/JSON writes a 64-bit field, which is
 // as a string. The digits are validated before std::strtoll sees them, because
@@ -213,12 +160,6 @@ class CjsonJsonReaderFactoryImpl final : public otlp_api::JsonReaderFactory {
 };
 
 }  // namespace
-
-std::shared_ptr<otlp_api::JsonWriterFactory> JsonGeneratorJsonWriterFactory() {
-  static const std::shared_ptr<otlp_api::JsonWriterFactory> instance =
-      std::make_shared<JsonGeneratorJsonWriterFactoryImpl>();
-  return instance;
-}
 
 std::shared_ptr<otlp_api::JsonReaderFactory> CjsonJsonReaderFactory() {
   static const std::shared_ptr<otlp_api::JsonReaderFactory> instance =

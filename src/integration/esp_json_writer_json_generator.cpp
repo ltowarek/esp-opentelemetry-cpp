@@ -1,6 +1,6 @@
 // Validated before json_generator sees it, which trusts its caller to balance containers.
 
-#include "esp_json_writer.hpp"
+#include "esp_otlp_json_backends.hpp"
 
 extern "C" {
 #include "esp_log.h"
@@ -9,14 +9,21 @@ extern "C" {
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "opentelemetry/exporters/otlp/otlp_json_writer.h"
+#include "opentelemetry/exporters/otlp/otlp_json_writer_factory.h"
+#include "opentelemetry/nostd/string_view.h"
+
 namespace esp_opentelemetry {
 
 namespace {
+
+namespace otlp_api = opentelemetry::exporter::otlp;
 
 constexpr const char* TAG = "esp_otel_json_writer";
 
@@ -123,7 +130,7 @@ std::string_view well_formed_utf8(std::string_view text, std::string& repaired) 
   return repairing ? std::string_view(repaired) : text;
 }
 
-class JsonGeneratorJsonWriter final : public JsonWriter {
+class JsonGeneratorJsonWriter final : public otlp_api::JsonWriter {
  public:
   JsonGeneratorJsonWriter() noexcept {
     json_gen_str_start(&gen_, chunk_, sizeof(chunk_), &Flush, this);
@@ -134,7 +141,7 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
   void BeginArray() noexcept override { Open(Container::kArray); }
   void EndArray() noexcept override { Close(Container::kArray); }
 
-  void Key(std::string_view key) noexcept override {
+  void Key(opentelemetry::nostd::string_view key) noexcept override {
     if (!ok_) {
       return;
     }
@@ -151,7 +158,7 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
       return;
     }
     // json_generator takes names as C strings.
-    key_.assign(well_formed_utf8(key, utf8_));
+    key_.assign(well_formed_utf8(std::string_view(key.data(), key.size()), utf8_));
     has_key_ = true;
   }
 
@@ -160,8 +167,9 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
           [this] { return json_gen_arr_set_null(&gen_); });
   }
 
-  void WriteString(std::string_view text) noexcept override {
-    const std::string_view value = well_formed_utf8(text, utf8_);
+  void WriteString(opentelemetry::nostd::string_view text) noexcept override {
+    const std::string_view value =
+        well_formed_utf8(std::string_view(text.data(), text.size()), utf8_);
     Write(
         [this, value](const char* name) {
           return json_gen_obj_set_string_len(&gen_, name, value.data(), value.size());
@@ -329,10 +337,19 @@ class JsonGeneratorJsonWriter final : public JsonWriter {
   bool ok_ = true;
 };
 
+class JsonGeneratorJsonWriterFactoryImpl final : public otlp_api::JsonWriterFactory {
+ public:
+  std::unique_ptr<otlp_api::JsonWriter> Create() override {
+    return std::make_unique<JsonGeneratorJsonWriter>();
+  }
+};
+
 }  // namespace
 
-std::unique_ptr<JsonWriter> MakeJsonGeneratorJsonWriter() {
-  return std::make_unique<JsonGeneratorJsonWriter>();
+std::shared_ptr<otlp_api::JsonWriterFactory> JsonGeneratorJsonWriterFactory() {
+  static const std::shared_ptr<otlp_api::JsonWriterFactory> instance =
+      std::make_shared<JsonGeneratorJsonWriterFactoryImpl>();
+  return instance;
 }
 
 }  // namespace esp_opentelemetry

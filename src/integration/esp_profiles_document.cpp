@@ -23,16 +23,17 @@ extern "C" {
 }
 
 #include "esp_git_ref.hpp"
-#include "esp_json_writer.hpp"
+#include "esp_otlp_json_backends.hpp"
 #include "esp_profiles_exporter.hpp"
+#include "opentelemetry/exporters/otlp/otlp_json_writer.h"
 #include "opentelemetry/nostd/span.h"
+#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/trace/span_id.h"
 
 #include <array>
 #include <memory>
 #include <utility>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -49,6 +50,8 @@ void set_profiles_exporter(std::unique_ptr<ProfilesExporter> exporter) {
 }
 
 namespace {
+
+using opentelemetry::exporter::otlp::JsonWriter;
 
 constexpr const char* TAG = "esp_otel_profiles";
 
@@ -183,7 +186,7 @@ class Resolver {
   std::unordered_map<std::string, int> attribute_index_;
 };
 
-void write_string_value(JsonWriter& j, const char* name, std::string_view s) {
+void write_string_value(JsonWriter& j, const char* name, opentelemetry::nostd::string_view s) {
   j.Key(name);
   j.BeginObject();
   j.Key("stringValue");
@@ -379,7 +382,7 @@ void export_profiles(const ProfileStack* stacks, std::size_t count,
   }
   const Document doc = Resolver(stacks, count, time_unix_nano, duration_nano).resolve();
 
-  const std::unique_ptr<JsonWriter> writer = MakeJsonGeneratorJsonWriter();
+  const std::unique_ptr<JsonWriter> writer = JsonGeneratorJsonWriterFactory()->Create();
   write_document(*writer, doc);
   const std::string body = writer->ToString();
   if (!writer->ok()) {

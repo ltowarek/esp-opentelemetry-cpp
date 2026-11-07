@@ -14,7 +14,7 @@
 // constructs must therefore be given these factories explicitly — the OTLP/JSON
 // exporters, the protobuf-backed OTLP/HTTP exporters (which serialise JSON
 // bodies through the same seam), and the OTLP file exporters behind the JTAG
-// transport alike.
+// transport alike. The profiles exporter writes through the same JsonWriter.
 
 #pragma once
 
@@ -30,6 +30,7 @@ namespace esp_opentelemetry {
 std::shared_ptr<opentelemetry::exporter::otlp::JsonWriterFactory>
 JsonGeneratorJsonWriterFactory();
 
+// Defined only in builds that compile an SDK OTLP exporter.
 std::shared_ptr<opentelemetry::exporter::otlp::JsonReaderFactory>
 CjsonJsonReaderFactory();
 

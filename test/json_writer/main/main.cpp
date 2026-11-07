@@ -1,6 +1,9 @@
 // The json_generator JsonWriter writes each token's exact bytes and rejects malformed token streams.
 
-#include "esp_json_writer.hpp"
+#include "esp_otlp_json_backends.hpp"
+
+#include "opentelemetry/exporters/otlp/otlp_json_writer.h"
+#include "opentelemetry/nostd/string_view.h"
 
 extern "C" {
 #include "unity.h"
@@ -10,22 +13,22 @@ extern "C" {
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
 
 namespace {
 
-using esp_opentelemetry::JsonWriter;
+using opentelemetry::exporter::otlp::JsonWriter;
+using opentelemetry::nostd::string_view;
 
 template <typename Write>
 bool writes_ok(Write write) {
-  const std::unique_ptr<JsonWriter> writer = esp_opentelemetry::MakeJsonGeneratorJsonWriter();
+  const std::unique_ptr<JsonWriter> writer = esp_opentelemetry::JsonGeneratorJsonWriterFactory()->Create();
   write(*writer);
   return writer->ok();
 }
 
 template <typename Write>
 std::string written(Write write) {
-  const std::unique_ptr<JsonWriter> writer = esp_opentelemetry::MakeJsonGeneratorJsonWriter();
+  const std::unique_ptr<JsonWriter> writer = esp_opentelemetry::JsonGeneratorJsonWriterFactory()->Create();
   write(*writer);
   return writer->ToString();
 }
@@ -77,8 +80,8 @@ void test_top_level_scalar() {
 void test_key_is_bounded_by_its_view() {
   TEST_ASSERT_EQUAL_STRING("{\"ab\":\"x\"}", written([](JsonWriter& w) {
                              w.BeginObject();
-                             w.Key(std::string_view("abc", 2));
-                             w.WriteString(std::string_view("xyz", 1));
+                             w.Key(string_view("abc", 2));
+                             w.WriteString(string_view("xyz", 1));
                              w.EndObject();
                            }).c_str());
 }
@@ -300,7 +303,7 @@ void test_second_top_level_value_fails() {
 }
 
 void test_write_after_to_string_fails() {
-  const std::unique_ptr<JsonWriter> w = esp_opentelemetry::MakeJsonGeneratorJsonWriter();
+  const std::unique_ptr<JsonWriter> w = esp_opentelemetry::JsonGeneratorJsonWriterFactory()->Create();
   w->BeginArray();
   w->EndArray();
   (void)w->ToString();
