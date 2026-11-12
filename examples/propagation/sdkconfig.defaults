@@ -6,6 +6,9 @@ CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_MODE_OCT=y
 
+# Stop at the allocation that starves a FreeRTOS synchronization object.
+CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS=y
+
 # OpenTelemetry tracing + its protobuf/Abseil dependencies blow past the
 # stock "single app large" 1.5 MB factory partition. Grow flash to 4 MB
 # and switch to a custom layout with a ~3.25 MB factory slot.

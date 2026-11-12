@@ -6,6 +6,9 @@ CONFIG_SPIRAM=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_MODE_OCT=y
 
+# Stop at the allocation that starves a FreeRTOS synchronization object.
+CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS=y
+
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 
 # The exporter this example constructs must be compiled in; the OTLP/HTTP and

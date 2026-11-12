@@ -70,6 +70,19 @@ CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"   # t
 CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2     # per-task span slot for span profiles
 ```
 
+### Diagnose internal-RAM allocation failures
+
+Keep enough internal-RAM headroom for FreeRTOS synchronization objects. On the
+ESP-IDF toolchain, constructing a `std::mutex` needs an internal-RAM semaphore,
+but libstdc++ does not surface a failed `pthread_mutex_init()`. The later lock or
+destructor can therefore assert inside SDK code even though the root cause was
+an earlier allocation failure.
+
+Enable `CONFIG_HEAP_ABORT_WHEN_ALLOCATION_FAILS=y` in development builds so the
+device aborts at the failed allocation instead. The example configurations in
+this repository enable it. This component does not install a failed-allocation
+callback because ESP-IDF provides one application-owned global callback slot.
+
 When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead. Its exporter factories and base-URL option still exist; the factories return `nullptr`, which the setup call treats as the signal off, so turning a signal on or off needs no change to application code.
 
 The application constructs its exporter and passes it to the setup call, as it
