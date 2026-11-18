@@ -37,7 +37,7 @@ void esp_opentelemetry_profiling_setup(
     std::unique_ptr<esp_opentelemetry::ProfilesExporter> exporter);
 
 // Convenience overload: exports over OTLP/HTTP to
-// CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL, matching the other signals'
+// CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT, matching the other signals'
 // no-exporter overloads. Does nothing when that URL is empty.
 void esp_opentelemetry_profiling_setup();
 

@@ -25,7 +25,7 @@ dropped.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SYMBOLIZER_LISTEN_ADDR` | `0.0.0.0:4319` | OTLP/HTTP JSON profiles listener (the device's `CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL`) |
+| `SYMBOLIZER_LISTEN_ADDR` | `0.0.0.0:4319` | OTLP/HTTP JSON profiles listener (the device's `CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT` is this address plus `/v1development/profiles`) |
 | `SYMBOLIZER_FORWARD_URL` | `http://otel-collector:4318/v1development/profiles` | Where symbolized profiles are forwarded |
 | `SYMBOLIZER_SYMBOLS_DIR` | `/symbols` | Manual-override store (`<sha256>.elf`) |
 | `SYMBOLIZER_ELF_GLOBS` | `/firmware/build/*.elf:/firmware/components/*/test_apps/build/*.elf` | Colon-separated glob patterns for ELF auto-discovery |

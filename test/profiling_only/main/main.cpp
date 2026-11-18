@@ -15,7 +15,7 @@ namespace {
 
 void test_otlp_http_profiles_exporter_is_built() {
   TEST_ASSERT_NOT_NULL(esp_opentelemetry::MakeOtlpHttpProfilesExporter(
-                           CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL)
+                           CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT)
                            .get());
 }
 
@@ -33,19 +33,19 @@ void test_ostream_profiles_exporter_is_built() {
 
 void test_otlp_http_span_exporter_is_null() {
   TEST_ASSERT_NULL(
-      esp_opentelemetry::MakeOtlpHttpSpanExporter(CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL)
+      esp_opentelemetry::MakeOtlpHttpSpanExporter(CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT)
           .get());
 }
 
 void test_otlp_http_metric_exporter_is_null() {
   TEST_ASSERT_NULL(
-      esp_opentelemetry::MakeOtlpHttpMetricExporter(CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL)
+      esp_opentelemetry::MakeOtlpHttpMetricExporter(CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT)
           .get());
 }
 
 void test_otlp_http_log_record_exporter_is_null() {
   TEST_ASSERT_NULL(
-      esp_opentelemetry::MakeOtlpHttpLogRecordExporter(CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL)
+      esp_opentelemetry::MakeOtlpHttpLogRecordExporter(CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT)
           .get());
 }
 

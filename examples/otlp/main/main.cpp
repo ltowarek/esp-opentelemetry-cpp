@@ -109,23 +109,23 @@ extern "C" void app_main()
     ESP_LOGI(TAG, "Wi-Fi connected");
     sync_time();
 
-    // One exporter per signal. Each takes its own base URL: metrics often go
+    // One exporter per signal. Each takes its own endpoint URL: metrics often go
     // to a Prometheus-compatible store's OTLP endpoint and profiles to the
     // symbolizer, so the three rarely share a host.
     const opentelemetry::sdk::resource::ResourceAttributes resource{
         {"service.name", CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME}};
     esp_opentelemetry_tracing_setup(
         esp_opentelemetry::MakeOtlpHttpSpanExporter(
-            CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL), resource);
+            CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT), resource);
     esp_opentelemetry_logs_setup(
         esp_opentelemetry::MakeOtlpHttpLogRecordExporter(
-            CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL), resource);
+            CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT), resource);
     esp_opentelemetry_metrics_setup(
         esp_opentelemetry::MakeOtlpHttpMetricExporter(
-            CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL), resource);
+            CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT), resource);
     esp_opentelemetry_profiling_setup(
         esp_opentelemetry::MakeOtlpHttpProfilesExporter(
-            CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL));
+            CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT));
 
     auto tracer  = esp_opentelemetry_tracer();
     auto logger  = esp_opentelemetry_logger();

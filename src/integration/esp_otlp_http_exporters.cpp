@@ -54,10 +54,10 @@ void ApplyCommon(Options& options, const std::string& url) {
 #endif  // CONFIG_ESP_OPENTELEMETRY_SDK_ENABLED
 
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
-    [[maybe_unused]] const std::string& base_url) {
+    [[maybe_unused]] const std::string& url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED)
   otlp_api::OtlpHttpExporterOptions options;
-  ApplyCommon(options, base_url + "/v1/traces");
+  ApplyCommon(options, url);
   return std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(
       new otlp_api::OtlpHttpExporter(options, MakeEspHttpClient()));
 #else
@@ -66,10 +66,10 @@ std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporte
 }
 
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
-MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
+MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED)
   otlp_api::OtlpHttpLogRecordExporterOptions options;
-  ApplyCommon(options, base_url + "/v1/logs");
+  ApplyCommon(options, url);
   return std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>(
       new otlp_api::OtlpHttpLogRecordExporter(options, MakeEspHttpClient()));
 #else
@@ -78,10 +78,10 @@ MakeOtlpHttpLogRecordExporter([[maybe_unused]] const std::string& base_url) {
 }
 
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
-MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& base_url) {
+MakeOtlpHttpMetricExporter([[maybe_unused]] const std::string& url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED)
   otlp_api::OtlpHttpMetricExporterOptions options;
-  ApplyCommon(options, base_url + "/v1/metrics");
+  ApplyCommon(options, url);
   return otlp_api::OtlpHttpMetricExporterFactory::Create(options, MakeEspHttpClient());
 #else
   return nullptr;
@@ -136,10 +136,9 @@ class OtlpHttpProfilesExporter final : public ProfilesExporter {
 #endif  // CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED
 
 std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
-    [[maybe_unused]] const std::string& base_url) {
+    [[maybe_unused]] const std::string& url) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED)
-  return std::make_unique<OtlpHttpProfilesExporter>(base_url +
-                                                    "/v1development/profiles");
+  return std::make_unique<OtlpHttpProfilesExporter>(url);
 #else
   return nullptr;
 #endif

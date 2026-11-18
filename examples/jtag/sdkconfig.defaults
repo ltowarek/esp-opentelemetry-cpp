@@ -22,7 +22,7 @@ CONFIG_ESP_TRACE_TRANSPORT_APPTRACE=y
 CONFIG_APPTRACE_DEST_JTAG=y
 
 # Every signal, each with a JTAG exporter. The OTLP/HTTP exporters are not
-# compiled in, so their base URLs do not appear at all.
+# compiled in, so their endpoint options do not appear at all.
 CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=y
 CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP=n
 CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y

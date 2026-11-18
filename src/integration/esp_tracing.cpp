@@ -108,9 +108,9 @@ void esp_opentelemetry_tracing_setup(
     [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
-  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL;
+  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT;
   if (endpoint.empty()) {
-    ESP_LOGW(TAG, "tracing base URL is empty; tracing disabled.");
+    ESP_LOGW(TAG, "tracing endpoint is empty; tracing disabled.");
     return;
   }
   esp_opentelemetry_tracing_setup(

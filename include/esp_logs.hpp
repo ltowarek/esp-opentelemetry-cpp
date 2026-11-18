@@ -16,7 +16,7 @@
 //
 // The exporter is the caller's choice, as it is upstream. The no-exporter
 // overload builds an OTLP/HTTP one from
-// CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL.
+// CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT.
 //
 // When CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED is off, or no exporter is
 // supplied and that URL is empty, esp_opentelemetry_logs_setup() leaves the
@@ -54,7 +54,7 @@ void esp_opentelemetry_logs_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience overload: exports over OTLP/HTTP to
-// CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL. Does nothing when empty.
+// CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT. Does nothing when empty.
 void esp_opentelemetry_logs_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 

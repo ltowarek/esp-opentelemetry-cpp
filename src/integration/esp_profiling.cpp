@@ -379,7 +379,7 @@ void esp_opentelemetry_profiling_setup(
 
 void esp_opentelemetry_profiling_setup() {
 #if defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
-  const char* endpoint = CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL;
+  const char* endpoint = CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT;
   if (endpoint[0] != '\0') {
     esp_opentelemetry_profiling_setup(
         esp_opentelemetry::MakeOtlpHttpProfilesExporter(endpoint));
