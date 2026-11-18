@@ -84,12 +84,12 @@ void esp_opentelemetry_metrics_setup(
     [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
-  const char* metrics_base = CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL;
-  if (*metrics_base == '\0') {
-    ESP_LOGW("esp_otel_metrics", "metrics base URL is empty; metrics disabled.");
+  const char* metrics_endpoint = CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT;
+  if (*metrics_endpoint == '\0') {
+    ESP_LOGW("esp_otel_metrics", "metrics endpoint is empty; metrics disabled.");
     return;
   }
   esp_opentelemetry_metrics_setup(
-      esp_opentelemetry::MakeOtlpHttpMetricExporter(metrics_base), resource_attrs);
+      esp_opentelemetry::MakeOtlpHttpMetricExporter(metrics_endpoint), resource_attrs);
 #endif
 }

@@ -98,15 +98,15 @@ menu "OpenTelemetry"
         bool "Enable OpenTelemetry tracing"
         default n
 
-    config ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL
-        string "Tracing OTLP base URL (e.g. http://192.168.1.10:4318)"
+    config ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT
+        string "Tracing OTLP endpoint (e.g. http://192.168.1.10:4318/v1/traces)"
         depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
-            Base URL for OTLP/HTTP trace export. The path "/v1/traces" is
-            appended automatically. Must be reachable from the device over
-            Wi-Fi (a plain host:port URL - the ESP32 has no mDNS/service
-            discovery).
+            Full URL for OTLP/HTTP trace export, used as is, like
+            OTEL_EXPORTER_OTLP_TRACES_ENDPOINT. Must be reachable from the
+            device over Wi-Fi (a plain host:port URL - the ESP32 has no
+            mDNS/service discovery).
 
     config ESP_OPENTELEMETRY_PROFILING_ENABLED
         bool "Enable statistical CPU profiler"
@@ -177,18 +177,19 @@ menu "OpenTelemetry"
             validating the sampler on hardware with xtensa-esp-elf-addr2line;
             noisy, so leave disabled in normal use.
 
-    config ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL
-        string "Profiles OTLP/HTTP endpoint (the profiling-symbolizer)"
+    config ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT
+        string "Profiles OTLP endpoint (e.g. http://192.168.1.10:4319/v1development/profiles)"
         depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
-            Base URL of the profiling-symbolizer; "/v1development/profiles" is
-            appended automatically. esp_opentelemetry::export_profiles() POSTs
+            Full URL of the profiling-symbolizer's profiles endpoint, used as
+            is, like OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT. The symbolizer
+            listens on "/v1development/profiles". esp_opentelemetry::export_profiles() POSTs
             unsymbolized OTLP/JSON profiles here and the symbolizer resolves
             them against the firmware ELF before forwarding to the collector.
             Distinct from the tracing endpoint (profiles go via the symbolizer,
             not directly to the collector). Leave empty to disable export.
-            Like every signal's base URL, it exists whether or not the signal
+            Like every signal's endpoint, it exists whether or not the signal
             is enabled, so an application builds its exporter the same way in
             every build.
 
@@ -228,14 +229,14 @@ menu "OpenTelemetry"
             esp_log_otel.h in a translation unit to route its existing
             ESP_LOGI/W/E call sites through the logger as well.
 
-    config ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL
-        string "Logs OTLP base URL"
+    config ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT
+        string "Logs OTLP endpoint (e.g. http://192.168.1.10:4318/v1/logs)"
         depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
-            Base URL for OTLP/HTTP log export. The path "/v1/logs" is
-            appended automatically. Required when logs are enabled; when
-            empty, log export stays disabled.
+            Full URL for OTLP/HTTP log export, used as is, like
+            OTEL_EXPORTER_OTLP_LOGS_ENDPOINT. Required when logs are enabled;
+            when empty, log export stays disabled.
 
     config ESP_OPENTELEMETRY_LOGS_BATCH_MAX_QUEUE_SIZE
         int "Max queued log records before drop"
@@ -283,14 +284,14 @@ menu "OpenTelemetry"
             How often the PeriodicExportingMetricReader collects and exports
             metrics.
 
-    config ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL
-        string "Metrics OTLP base URL"
+    config ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT
+        string "Metrics OTLP endpoint (e.g. http://192.168.1.10:4318/v1/metrics)"
         depends on ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP
         default ""
         help
-            Base URL for OTLP/HTTP metrics export. The path "/v1/metrics" is
-            appended automatically. Required when metrics are enabled; when
-            empty, metrics export stays disabled.
+            Full URL for OTLP/HTTP metrics export, used as is, like
+            OTEL_EXPORTER_OTLP_METRICS_ENDPOINT. Required when metrics are
+            enabled; when empty, metrics export stays disabled.
 
     config ESP_OPENTELEMETRY_SDK_ENABLED
         bool

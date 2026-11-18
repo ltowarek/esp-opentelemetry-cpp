@@ -9,7 +9,7 @@
 //
 // The exporter is the caller's choice, as it is upstream. The no-exporter
 // overload builds an OTLP/HTTP one from
-// CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL.
+// CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT.
 //
 // When CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is off, or no exporter is
 // supplied and that URL is empty, esp_opentelemetry_metrics_setup() leaves the
@@ -29,8 +29,8 @@
 
 // Install the global meter provider: a PeriodicExportingMetricReader
 // (CONFIG_ESP_OPENTELEMETRY_METRICS_EXPORT_INTERVAL_MS) feeding the OTLP/HTTP
-// metric exporter at CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL. A no-op
-// when CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is off or the base URL is
+// metric exporter at CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT. A no-op
+// when CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED is off or the endpoint is
 // empty — instruments registered via the API's no-op provider are silently
 // dropped. resource_attrs becomes the meter's resource as-is.
 // Initialise the global meter provider with the given exporter, wrapped in a
@@ -41,7 +41,7 @@ void esp_opentelemetry_metrics_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience overload: exports over OTLP/HTTP to
-// CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL. Does nothing when empty.
+// CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT. Does nothing when empty.
 void esp_opentelemetry_metrics_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 

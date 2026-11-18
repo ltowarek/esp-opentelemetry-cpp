@@ -14,23 +14,23 @@ configured for it.
 
 ## Configure
 
-Set the Wi-Fi credentials and one base URL per signal in
+Set the Wi-Fi credentials and one endpoint URL per signal in
 `sdkconfig.defaults`, or through `idf.py menuconfig`:
 
 ```
 CONFIG_WIFI_SSID="..."
 CONFIG_WIFI_PASSWORD="..."
-CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL="http://192.168.1.10:4318"
-CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL="http://192.168.1.10:4318"
-CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL="http://192.168.1.10:8080/otlp"
-CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"
+CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT="http://192.168.1.10:4318/v1/traces"
+CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT="http://192.168.1.10:4318/v1/logs"
+CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT="http://192.168.1.10:8080/otlp/v1/metrics"
+CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT="http://192.168.1.10:4319/v1development/profiles"
 ```
 
 The three differ in practice: metrics often go to a Prometheus-compatible
 store's own OTLP endpoint, and profiles go to the symbolizer
 ([`tools/symbolizer/`](../../tools/symbolizer/)), which resolves raw program
-counters against the firmware ELF before forwarding. A signal whose URL is
-empty stays disabled.
+counters against the firmware ELF before forwarding. Each URL is used as is,
+with no path appended. A signal whose URL is empty stays disabled.
 
 ## Timestamps
 

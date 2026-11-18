@@ -8,7 +8,7 @@
 //   auto scope = opentelemetry::trace::Scope(span);
 //
 // When CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED is off or
-// ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL is empty,
+// ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT is empty,
 // esp_opentelemetry_tracing_setup() leaves the global provider at its default
 // (no-op) value; esp_opentelemetry_tracer() still returns a valid tracer
 // whose spans are silently dropped.
@@ -50,7 +50,7 @@ void esp_opentelemetry_tracing_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});
 
 // Convenience overload: exports over OTLP/HTTP to
-// CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL. Does nothing when that URL
+// CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT. Does nothing when that URL
 // is empty. Equivalent to passing MakeOtlpHttpSpanExporter(that URL).
 void esp_opentelemetry_tracing_setup(
     opentelemetry::sdk::resource::ResourceAttributes resource_attrs = {});

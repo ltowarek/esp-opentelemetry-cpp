@@ -150,9 +150,9 @@ void esp_opentelemetry_logs_setup(
     [[maybe_unused]] opentelemetry::sdk::resource::ResourceAttributes resource_attrs) {
 #if defined(CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED) && \
     defined(CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP)
-  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL;
+  const std::string endpoint = CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT;
   if (endpoint.empty()) {
-    ESP_LOGW(TAG, "logs base URL is empty; logs disabled.");
+    ESP_LOGW(TAG, "logs endpoint is empty; logs disabled.");
     return;
   }
   esp_opentelemetry_logs_setup(

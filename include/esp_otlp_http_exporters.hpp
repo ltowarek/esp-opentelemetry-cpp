@@ -9,7 +9,7 @@
 //   auto provider  = TracerProviderFactory::Create(std::move(processor), resource);
 //
 // Requires CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_HTTP. Every factory and
-// every signal's ..._OTLP_BASE_URL option exist whenever this family is
+// every signal's ..._OTLP_ENDPOINT option exist whenever this family is
 // compiled in; a factory whose signal is disabled returns nullptr, which the
 // signal's setup call treats as the signal off.
 
@@ -30,21 +30,22 @@
 
 namespace esp_opentelemetry {
 
-// base_url is the collector root; "/v1/traces" is appended.
+// url is the full endpoint, e.g. http://host:4318/v1/traces.
 std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> MakeOtlpHttpSpanExporter(
-    const std::string& base_url);
+    const std::string& url);
 
-// base_url is the collector root; "/v1/logs" is appended.
+// url is the full endpoint, e.g. http://host:4318/v1/logs.
 std::unique_ptr<opentelemetry::sdk::logs::LogRecordExporter>
-MakeOtlpHttpLogRecordExporter(const std::string& base_url);
+MakeOtlpHttpLogRecordExporter(const std::string& url);
 
-// base_url is the collector root; "/v1/metrics" is appended.
+// url is the full endpoint, e.g. http://host:4318/v1/metrics.
 std::unique_ptr<opentelemetry::sdk::metrics::PushMetricExporter>
-MakeOtlpHttpMetricExporter(const std::string& base_url);
+MakeOtlpHttpMetricExporter(const std::string& url);
 
-// base_url is the symbolizer root; "/v1development/profiles" is appended.
+// url is the full symbolizer endpoint, e.g.
+// http://host:4319/v1development/profiles.
 std::unique_ptr<ProfilesExporter> MakeOtlpHttpProfilesExporter(
-    const std::string& base_url);
+    const std::string& url);
 
 }  // namespace esp_opentelemetry
 

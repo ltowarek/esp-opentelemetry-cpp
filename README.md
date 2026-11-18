@@ -60,26 +60,30 @@ Enable signals via `idf.py menuconfig` → **OpenTelemetry** or set in `sdkconfi
 ```
 CONFIG_ESP_OPENTELEMETRY_SERVICE_NAME="my-device"
 CONFIG_ESP_OPENTELEMETRY_TRACING_ENABLED=y
-CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_TRACING_OTLP_ENDPOINT="http://192.168.1.10:4318/v1/traces"
 CONFIG_ESP_OPENTELEMETRY_METRICS_ENABLED=y
-CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_METRICS_OTLP_ENDPOINT="http://192.168.1.10:4318/v1/metrics"
 CONFIG_ESP_OPENTELEMETRY_LOGS_ENABLED=y
-CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_BASE_URL="http://192.168.1.10:4318"
+CONFIG_ESP_OPENTELEMETRY_LOGS_OTLP_ENDPOINT="http://192.168.1.10:4318/v1/logs"
 CONFIG_ESP_OPENTELEMETRY_PROFILING_ENABLED=y
-CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_BASE_URL="http://192.168.1.10:4319"   # the symbolizer
+CONFIG_ESP_OPENTELEMETRY_PROFILES_OTLP_ENDPOINT="http://192.168.1.10:4319/v1development/profiles"   # the symbolizer
 CONFIG_FREERTOS_THREAD_LOCAL_STORAGE_POINTERS=2     # per-task span slot for span profiles
 ```
 
-When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead. Its exporter factories and base-URL option still exist; the factories return `nullptr`, which the setup call treats as the signal off, so turning a signal on or off needs no change to application code.
+When a signal's `..._ENABLED` option is off, the component still compiles and the API is available — all calls route to the SDK's built-in no-op provider (or return immediately) with zero runtime overhead. Its exporter factories and endpoint option still exist; the factories return `nullptr`, which the setup call treats as the signal off, so turning a signal on or off needs no change to application code.
 
 The application constructs its exporter and passes it to the setup call, as it
 does with the upstream SDK:
 
 ```cpp
 esp_opentelemetry_tracing_setup(
-    esp_opentelemetry::MakeOtlpHttpSpanExporter("http://192.168.1.10:4318"),
+    esp_opentelemetry::MakeOtlpHttpSpanExporter("http://192.168.1.10:4318/v1/traces"),
     {{"service.name", "my-device"}});
 ```
+
+Each `MakeOtlpHttp*Exporter()` takes the signal's full endpoint URL and uses it
+as is, like upstream's `OtlpHttp*ExporterOptions::url` and the OTel spec's
+`OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT`; it appends no path.
 
 Kconfig decides only which exporter implementations are *compiled in*, since on
 a 4 MB part you do not want to carry the ones you will not call:
@@ -97,7 +101,7 @@ two is selected. A build with both off (`CONFIG_ESP_OPENTELEMETRY_EXPORTER_OTLP_
 `CONFIG_ESP_OPENTELEMETRY_EXPORTER_JTAG=n`) excludes both entirely — see `examples/traces`, which uses the ESP log exporter instead.
 
 Each `esp_opentelemetry_*_setup()` also has a no-exporter overload that builds
-an OTLP/HTTP exporter from that signal's `..._OTLP_BASE_URL`, which is what a
+an OTLP/HTTP exporter from that signal's `..._OTLP_ENDPOINT`, which is what a
 firmware that only ever exports over Wi-Fi wants.
 
 Profiles have no exporter interface in opentelemetry-cpp, so the component
